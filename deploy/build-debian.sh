@@ -5,6 +5,7 @@ if [[ $(id -u) != 0 ]]; then
   echo 'Run inside the dedicated Debian 13 container as root.' >&2
   exit 1
 fi
+script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 . /etc/os-release
 if [[ $ID != debian || $VERSION_ID != 13 ]] || ! systemd-detect-virt --container >/dev/null; then
   echo 'This build script is for the Debian 13 container.' >&2
@@ -41,7 +42,7 @@ cmake --install "$build_root/libacars-build"
 if [[ ! -d $build_root/sdrangel/.git ]]; then
   run_build git clone --branch v8.1.0 --depth 1 https://github.com/f4exb/sdrangel.git "$build_root/sdrangel"
 fi
-patch_script=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/patch-adsb-headless.mjs
+patch_script="$script_dir/patch-adsb-headless.mjs"
 install -m 0644 -o openair -g "$(id -gn openair)" "$patch_script" "$build_root/patch-adsb-headless.mjs"
 run_build node "$build_root/patch-adsb-headless.mjs" "$build_root/sdrangel"
 flags=()
