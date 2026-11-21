@@ -1,0 +1,36 @@
+title: Open Air
+views:
+  - title: Open Air
+    path: radio
+    icon: mdi:radio
+    cards:
+      - type: entities
+        title: Tuner
+        show_header_toggle: false
+        entities:
+          - select.open_air_preset
+          - number.open_air_tune_frequency
+          - select.open_air_receive_mode
+          - button.open_air_ab_switch
+      - type: entities
+        title: Receiver
+        show_header_toggle: false
+        entities:
+          - binary_sensor.open_air_receiver_connected
+          - binary_sensor.open_air_receiver_running
+          - sensor.open_air_channel
+          - sensor.open_air_frequency
+          - sensor.open_air_signal_level
+          - binary_sensor.open_air_squelch_open
+          - sensor.open_air_squelch_threshold
+      - type: entities
+        title: Scanning
+        show_header_toggle: false
+        entities:
+          - switch.open_air_cb_scan
+          - switch.open_air_tower_scan
+          - number.open_air_cb_squelch
+          - sensor.open_air_local_area
+          - switch.open_air_local_scan
+          - button.open_air_rescan_local_area
+          - sensor.open_air_scan_status

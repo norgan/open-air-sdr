@@ -1,0 +1,69 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to Open Air",
+        "description": "Enter the HTTPS address of your Open Air server and its API token. Fill in the reverse proxy credentials if the server is behind an HTTP Basic access list.",
+        "data": {
+          "url": "Open Air server URL",
+          "token": "Open Air API token",
+          "proxy_username": "Reverse proxy username",
+          "proxy_password": "Reverse proxy password"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Reconnect Open Air",
+        "description": "Enter the current Open Air API token and any HTTP Basic credentials required by the reverse proxy.",
+        "data": {
+          "token": "Open Air API token",
+          "proxy_username": "Reverse proxy username",
+          "proxy_password": "Reverse proxy password"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Could not connect to the Open Air server over HTTPS.",
+      "invalid_auth": "Check the Open Air API token and any reverse proxy credentials.",
+      "invalid_proxy_auth": "Enter both reverse proxy credentials or leave both blank. The username cannot contain a colon.",
+      "invalid_token": "Enter the API token using printable characters without spaces or commas.",
+      "invalid_url": "Enter an HTTPS origin, for example https://radio.example.net, with no path or credentials.",
+      "unsupported_api": "The server does not expose the supported Open Air Home Assistant API. Check the URL and the installed server version."
+    },
+    "abort": {
+      "already_configured": "This Open Air server is already configured.",
+      "reauth_successful": "Open Air has reconnected."
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "connected": { "name": "Receiver connected" },
+      "running": { "name": "Receiver running" },
+      "squelch_open": { "name": "Squelch open" }
+    },
+    "button": {
+      "ab_switch": { "name": "A/B switch" },
+      "rescan_local_area": { "name": "Rescan local area" }
+    },
+    "number": {
+      "cb_squelch": { "name": "CB squelch" },
+      "tune_frequency": { "name": "Tune frequency" }
+    },
+    "select": {
+      "preset": { "name": "Preset" },
+      "receive_mode": { "name": "Receive mode" }
+    },
+    "sensor": {
+      "channel": { "name": "Channel" },
+      "frequency": { "name": "Frequency" },
+      "local_area": { "name": "Local area" },
+      "scan_status": { "name": "Scan status" },
+      "signal_level": { "name": "Signal level" },
+      "squelch_threshold": { "name": "Squelch threshold" }
+    },
+    "switch": {
+      "cb_scan": { "name": "CB scan" },
+      "tower_scan": { "name": "Tower scan" },
+      "local_scan": { "name": "Local scan" }
+    }
+  }
+}

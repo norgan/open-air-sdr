@@ -1,0 +1,3 @@
+load-module module-native-protocol-unix socket=/run/open-air-pulse/native
+load-module module-null-sink sink_name=open_air rate=48000 channels=2
+set-default-sink open_air

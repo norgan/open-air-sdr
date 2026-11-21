@@ -1,0 +1,12 @@
+[Unit]
+Description=Open Air virtual audio output
+PartOf=sdrangelsrv.service
+
+[Service]
+User=openair
+Group=openair
+RuntimeDirectory=open-air-pulse
+Environment=XDG_RUNTIME_DIR=/run/open-air-pulse
+ExecStart=/usr/bin/pulseaudio --daemonize=no --exit-idle-time=-1 -n -F /opt/open-air/deploy/pulse.pa
+Restart=on-failure
+RestartSec=3

@@ -1,0 +1,21 @@
+[Unit]
+Description=SDRangel headless receiver
+Requires=open-air-pulse.service
+After=open-air-pulse.service
+Before=open-air.service
+
+[Service]
+User=openair
+Group=openair
+SupplementaryGroups=plugdev
+StateDirectory=open-air
+Environment=PULSE_SERVER=unix:/run/open-air-pulse/native
+EnvironmentFile=-/etc/open-air.env
+ExecStart=/opt/sdrangel/bin/sdrangelsrv --api-address 127.0.0.1 --api-port 8091
+ExecStartPost=/usr/bin/env node /opt/open-air/deploy/bootstrap.mjs
+TimeoutStartSec=120
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

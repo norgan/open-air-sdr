@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101318">
+  <title>Open Air</title>
+  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/cb-panel.css">
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to reception</a>
+  <aside class="sidebar">
+    <div class="brand"><div class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></div>Open Air</div>
+    <nav class="view-nav" aria-label="Open Air views">
+      <a class="view-link" href="#signals" id="nav-signals" aria-current="page">Signals</a>
+      <a class="view-link" href="#receiver" id="nav-receiver">Receiver</a>
+      <a class="view-link" href="#tower" id="nav-tower">Tower</a>
+      <a class="view-link" href="#uhf-cb" id="nav-uhf-cb">UHF CB</a>
+      <a class="view-link" href="#messages" id="nav-messages">Messages</a>
+      <a class="view-link" href="#setup" id="nav-setup">Setup</a>
+    </nav>
+    <div class="shortcuts">
+      <h2 class="group-title">Quick tune</h2>
+      <div class="source-list" id="quick-sources"></div>
+    </div>
+    <div class="side-footer"><span class="side-status"><i></i><span id="side-status">Connecting to receiver</span></span></div>
+  </aside>
+  <main id="main">
+    <header class="toolbar">
+      <span class="breadcrumb" id="section-name">Signals</span>
+      <div class="toolbar-actions"><button id="close-app" class="control" type="button">Close</button><button id="demo" class="control" type="button">Sample view</button><button id="present" class="control present" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4H4v4m12-4h4v4M4 16v4h4m12-4v4h-4"/></svg> Present</button></div>
+    </header>
+    <section class="intro" aria-labelledby="title">
+      <div><p class="eyebrow"><span id="live-dot"></span><span id="live-label">CONNECTING TO RECEIVER</span></p><h1 id="title">Known signals</h1><p class="subtitle" id="subtitle"></p></div>
+      <div class="reception-controls">
+        <div class="frequency" id="frequency-readout" aria-label="Tuned frequency"><span id="frequency">-</span><small>MHz</small></div>
+        <button id="scan-mux" class="control mux-survey-control" type="button" hidden>Survey multiplex</button>
+        <button id="ab-switch" class="ab-switch" type="button" aria-label="Switch to previous channel" aria-keyshortcuts="B" title="Switch to previous channel (B)" disabled>
+          <strong>A/B</strong><span id="ab-target">—</span>
+        </button>
+        <div id="remote-audio" class="remote-audio" hidden>
+          <button id="listen-audio" class="listen-button" type="button" aria-pressed="false" data-audio="muted">
+            <svg class="listen-icon" viewBox="0 0 32 32" aria-hidden="true">
+              <path class="speaker-body" d="M4 12h5l6-5v18l-6-5H4z"/>
+              <path class="speaker-waves" d="M20 11a7 7 0 0 1 0 10m4-14a12 12 0 0 1 0 18"/>
+              <path class="speaker-mute" d="m21 13 6 6m0-6-6 6"/>
+            </svg>
+            <span id="listen-label">Listen</span>
+          </button>
+          <audio id="audio-player" preload="none"></audio>
+        </div>
+      </div>
+    </section>
+    <div id="notice" class="notice" role="status" hidden></div>
+    <section id="tower-controls" class="panel tower-controls" aria-label="Air traffic control" hidden>
+      <div class="tuner-field tower-channel-field">
+        <label for="tower-channel">ATC channel</label>
+        <select id="tower-channel"></select>
+      </div>
+      <div class="tuner-field"><label for="tower-squelch">Scan squelch (dB)</label><input id="tower-squelch" type="number" min="-100" max="0" step="1" value="-64" required></div>
+      <button class="control primary-control" id="tower-scan" type="button" aria-pressed="false">Scan</button>
+      <p id="tower-scan-status" role="status"></p>
+      <div class="tower-layout" role="group" aria-label="Aircraft display">
+        <button class="control" id="tower-show-map" type="button" aria-pressed="true">Map</button>
+        <button class="control" id="tower-show-radar" type="button" aria-pressed="false">Radar</button>
+      </div>
+    </section>
+    <section id="signal-meter" class="panel signal-meter" aria-labelledby="signal-meter-title" hidden>
+      <div class="signal-meter-level">
+        <h2 id="signal-meter-title">Signal level</h2>
+        <strong id="signal-level">—</strong>
+      </div>
+      <div id="signal-meter-track" class="signal-meter-track" aria-hidden="true"></div>
+      <div class="signal-meter-details">
+        <strong id="signal-quality">Waiting for signal</strong>
+        <span id="signal-contrast">—</span>
+      </div>
+    </section>
+    <section id="live-audio-settings" class="panel live-audio-settings" aria-labelledby="live-audio-title" hidden>
+      <h2 id="live-audio-title">Audio settings</h2>
+      <form id="live-audio-form" class="tuner-fields">
+        <div class="tuner-field">
+          <label for="live-audio-filter">Filter (kHz)</label>
+          <input id="live-audio-filter" name="bandwidth" type="number" step="0.1" inputmode="decimal" list="live-filter-choices">
+          <datalist id="live-filter-choices"></datalist>
+        </div>
+        <div class="tuner-field squelch-field" id="live-squelch-field">
+          <div class="squelch-heading"><label for="live-audio-squelch">Squelch (dB)</label><output id="live-squelch-readout" for="live-audio-squelch" aria-live="off">−62 dB</output></div>
+          <input id="live-audio-squelch" name="squelch" type="range" min="-100" max="0" step="1" value="-62">
+        </div>
+        <div class="tuner-field">
+          <label for="live-audio-volume">Volume (%)</label>
+          <input id="live-audio-volume" name="volume" type="number" min="0" max="100" step="1" inputmode="numeric">
+        </div>
+        <div class="tuner-field" id="live-rf-gain-field" hidden>
+          <label for="live-rf-gain">RF gain (dB)</label>
+          <select id="live-rf-gain" name="gain"></select>
+        </div>
+        <button id="live-audio-apply" class="control primary-control" type="submit">Apply</button>
+      </form>
+    </section>
+    <details id="signal-browser" class="panel signal-browser" aria-labelledby="signal-browser-title" open>
+      <summary class="signal-browser-summary" id="signal-browser-title">Signal presets</summary>
+      <div class="browser-search">
+        <label class="preset-search" for="signal-search"><span>Search</span><input id="signal-search" type="search" placeholder="Name, frequency or mode" autocomplete="off"></label>
+      </div>
+      <div id="signal-groups" class="signal-groups" role="group" aria-label="Signal categories"></div>
+      <div id="signal-list" class="signal-list" aria-label="Matching presets"></div>
+      <p id="signal-empty" class="no-presets" hidden></p>
+    </details>
+    <section id="receiver-controls" class="panel receiver-controls" aria-label="Manual tuning" hidden>
+      <form id="receiver-form">
+        <div class="tuner-fields">
+          <div class="tuner-field frequency-field">
+            <label for="receiver-frequency">Frequency (MHz)</label>
+            <div class="frequency-input">
+              <button class="control" id="step-down" type="button" aria-label="Tune down one step">−</button>
+              <input id="receiver-frequency" name="frequency" type="number" step="0.000001" inputmode="decimal" required>
+              <button class="control" id="step-up" type="button" aria-label="Tune up one step">+</button>
+            </div>
+          </div>
+          <div class="tuner-field">
+            <label for="receiver-step">Step</label>
+            <select id="receiver-step"><option value="1000">1 kHz</option><option value="5000">5 kHz</option><option value="8333">8.33 kHz</option><option value="10000">10 kHz</option><option value="12500" selected>12.5 kHz</option><option value="25000">25 kHz</option><option value="100000">100 kHz</option></select>
+          </div>
+          <div class="tuner-field">
+            <label for="receiver-mode">Mode or decoder</label>
+            <select id="receiver-mode" name="mode"></select>
+          </div>
+          <div class="tuner-field" id="bandwidth-field" hidden>
+            <label for="receiver-bandwidth">Filter (kHz)</label>
+            <input id="receiver-bandwidth" name="bandwidth" type="number" step="0.1" inputmode="decimal" placeholder="Default">
+          </div>
+          <div class="tuner-field squelch-field" id="squelch-field" hidden>
+            <div class="squelch-heading"><label for="receiver-squelch">Squelch (dB)</label><output id="receiver-squelch-readout" for="receiver-squelch" aria-live="off">−62 dB</output></div>
+            <input id="receiver-squelch" name="squelch" type="range" min="-100" max="0" step="1" value="-62">
+          </div>
+          <button class="control primary-control" id="tune-frequency" type="submit">Tune</button>
+        </div>
+        <details class="save-preset">
+          <summary>Save as preset</summary>
+          <div class="save-fields"><label for="preset-name">Name</label><input id="preset-name" name="name" maxlength="60" placeholder="Optional"><button class="control" id="save-preset" type="submit">Save and tune</button></div>
+        </details>
+      </form>
+      <details id="range-scanner" class="range-scanner">
+        <summary>Scan a frequency range</summary>
+        <form id="range-form" class="tuner-fields">
+          <div class="tuner-field"><label for="range-start">From (MHz)</label><input id="range-start" type="number" min="1" max="2000" step="0.000001" value="118" required></div>
+          <div class="tuner-field"><label for="range-end">To (MHz)</label><input id="range-end" type="number" min="1" max="2000" step="0.000001" value="137" required></div>
+          <div class="tuner-field"><label for="range-threshold">Above noise (dB)</label><input id="range-threshold" type="number" step="1" value="12" required></div>
+          <button id="range-start-button" class="control" type="submit">Start scan</button>
+          <button id="range-stop-button" class="control" type="button" hidden>Stop scan</button>
+        </form>
+        <div id="range-feedback" class="range-feedback" hidden>
+          <progress id="range-progress" aria-label="Frequency scan progress"></progress>
+          <p id="range-status" class="range-status" role="status"></p>
+        </div>
+        <canvas id="range-profile" width="640" height="120" role="img" aria-label="Multiplex spectrum power across frequency" hidden></canvas>
+        <div id="range-hits" class="range-hits" aria-label="Detected signal peaks" hidden></div>
+      </details>
+    </section>
+    <section id="cb-panel" aria-label="Australian UHF CB radio" hidden></section>
+    <section id="local-setup" class="local-setup" aria-label="Local receiver setup" hidden>
+      <section class="panel setup-panel" aria-labelledby="local-setup-title">
+        <h2 id="local-setup-title">Area and scan range</h2>
+        <form id="local-profile-form">
+          <fieldset id="local-profile-fields" disabled>
+            <legend class="visually-hidden">Local area and scan range</legend>
+            <div class="tuner-fields">
+              <div class="tuner-field setup-name-field">
+                <label for="local-area">Area name</label>
+                <input id="local-area" maxlength="80" placeholder="Suburb or region" required>
+              </div>
+              <label class="setup-check"><input id="local-sydney" type="checkbox"> Include Sydney example presets</label>
+            </div>
+            <div class="tuner-fields setup-scan-fields">
+              <div class="tuner-field">
+                <label for="local-scan-start">From (MHz)</label>
+                <input id="local-scan-start" type="number" min="1" max="2000" step="0.000001" inputmode="decimal" required>
+              </div>
+              <div class="tuner-field">
+                <label for="local-scan-end">To (MHz)</label>
+                <input id="local-scan-end" type="number" min="1" max="2000" step="0.000001" inputmode="decimal" required>
+              </div>
+              <div class="tuner-field">
+                <label for="local-scan-threshold">Above noise (dB)</label>
+                <input id="local-scan-threshold" type="number" min="0" step="any" inputmode="decimal" required>
+              </div>
+            </div>
+            <details class="setup-map-centre">
+              <summary>Tower map centre</summary>
+              <p>Use a nearby airport or city centre. Open Air uses these coordinates to look up aircraft around it.</p>
+              <div class="tuner-fields">
+                <div class="tuner-field"><label for="local-map-latitude">Latitude</label><input id="local-map-latitude" type="number" inputmode="decimal" min="-85" max="85" step="any"></div>
+                <div class="tuner-field"><label for="local-map-longitude">Longitude</label><input id="local-map-longitude" type="number" inputmode="decimal" min="-180" max="180" step="any"></div>
+              </div>
+            </details>
+            <div class="setup-actions">
+              <button id="local-setup-save" class="control" type="submit">Save setup</button>
+              <button id="local-scan-run" class="control primary-control" type="submit" disabled>Rescan</button>
+              <button id="local-scan-stop" class="control" type="button" hidden>Stop scan</button>
+            </div>
+          </fieldset>
+          <p id="local-setup-feedback" class="setup-feedback" role="status">Loading local setup…</p>
+        </form>
+      </section>
+      <section class="panel setup-panel" aria-labelledby="setup-results-title">
+        <h2 id="setup-results-title">Detected peaks</h2>
+        <div class="setup-progress">
+          <p id="local-scan-status" class="setup-feedback" role="status">Run a scan to find peaks above the noise floor.</p>
+          <progress id="local-scan-progress" aria-label="Frequency windows scanned" hidden></progress>
+          <small id="local-scan-count" class="setup-progress-count" aria-hidden="true" hidden></small>
+        </div>
+        <ul id="local-scan-hits" class="setup-list" aria-label="Signal peaks" hidden></ul>
+      </section>
+      <section class="panel setup-panel" aria-labelledby="setup-presets-title">
+        <h2 id="setup-presets-title">Local presets</h2>
+        <form id="local-preset-form">
+          <fieldset class="tuner-fields" id="local-preset-fields" disabled>
+            <legend class="visually-hidden">Preset editor</legend>
+            <div class="tuner-field setup-name-field">
+              <label for="local-preset-name">Preset name</label>
+              <input id="local-preset-name" maxlength="60" placeholder="Optional">
+            </div>
+            <div class="tuner-field">
+              <label for="local-preset-frequency">Frequency (MHz)</label>
+              <input id="local-preset-frequency" type="number" min="1" max="2000" step="0.000001" inputmode="decimal" required>
+            </div>
+            <div class="tuner-field">
+              <label for="local-preset-mode">Mode or decoder</label>
+              <select id="local-preset-mode"></select>
+            </div>
+            <button id="local-preset-submit" class="control" type="submit">Add preset</button>
+            <button id="local-preset-tune" class="control" type="button" disabled>Tune</button>
+            <button id="local-preset-cancel" class="control" type="button" hidden>Cancel edit</button>
+          </fieldset>
+          <p id="local-preset-feedback" class="setup-feedback" role="status"></p>
+        </form>
+        <ul id="local-preset-list" class="setup-list" aria-label="Local presets" hidden></ul>
+      </section>
+    </section>
+    <section id="decoded-history" class="panel decoded-history" aria-label="Decoded message history" hidden>
+      <div class="panel-top"><div><h2>ACARS and VDL Mode 2</h2><p id="history-status" role="status">Loading saved messages.</p></div></div>
+      <label class="preset-search" for="history-search"><span>Search</span><input id="history-search" type="search" placeholder="Aircraft, label or message text" autocomplete="off"></label>
+      <div id="history-results" class="activity-list" aria-label="Saved messages"></div>
+    </section>
+    <section class="metrics" id="metrics" aria-label="Reception measurements"></section>
+    <div class="pane-grid">
+      <section class="panel stage" aria-labelledby="stage-title">
+        <div class="panel-top"><div><h2 id="stage-title">Receiver activity</h2><p id="stage-caption">Latest measurements</p></div><span id="stage-tag" class="tag">LOCAL</span></div>
+        <div id="stage-content" class="stage-content">
+          <canvas id="scope" role="img" aria-label="Received radio power across the tuned bandwidth"></canvas>
+          <div id="radar" hidden></div>
+          <div id="tower-map" role="region" aria-label="Geographic map of aircraft" hidden></div>
+          <p id="tower-map-status" class="tower-map-status" role="status" hidden></p>
+          <div id="stage-empty" class="empty" hidden></div>
+        </div>
+        <section id="waterfall-panel" class="waterfall-panel" hidden>
+          <div class="panel-top"><div><h2>Waterfall</h2><p id="waterfall-frequency">Waiting for live samples</p></div></div>
+          <canvas id="waterfall" width="512" height="192" role="img" aria-label="Signal power across frequency over time"></canvas>
+          <div id="waterfall-empty" class="waterfall-empty" hidden></div>
+          <div id="waterfall-resize" role="separator" tabindex="0" aria-label="Resize waterfall" aria-orientation="horizontal" aria-controls="waterfall" aria-valuemin="96" aria-valuemax="720" aria-valuenow="192" title="Drag or use the arrow keys to adjust waterfall height"></div>
+        </section>
+      </section>
+      <section class="panel activity" aria-labelledby="activity-title">
+        <div class="panel-top"><div><h2 id="activity-title">What's coming in</h2><p id="activity-caption">Decoded by your receiver</p></div><a id="tower-aircraft-credit" class="tag" href="https://www.adsb.lol/docs/open-data/api" target="_blank" rel="noopener" hidden>adsb.lol</a></div>
+        <div id="activity" class="activity-list"></div>
+      </section>
+    </div>
+    <footer><span id="local-area-footer"></span><span id="updated">-</span></footer>
+  </main>
+  <template id="thing"><div class="activity-item"><span class="item-icon" aria-hidden="true"></span><div class="item-body"><div class="item-header"><strong></strong><small></small></div><span class="item-detail"></span></div></div></template>
+</body>
+</html>

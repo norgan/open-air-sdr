@@ -1,0 +1,19 @@
+[Unit]
+Description=Open Air browser radio
+Requires=sdrangelsrv.service
+After=sdrangelsrv.service
+PartOf=sdrangelsrv.service
+
+[Service]
+User=openair
+Group=openair
+WorkingDirectory=/opt/open-air
+RuntimeDirectory=open-air
+Environment=TMPDIR=/run/open-air
+EnvironmentFile=/etc/open-air.env
+ExecStart=/usr/bin/env node /opt/open-air/server.mjs
+Restart=on-failure
+RestartSec=4
+
+[Install]
+WantedBy=multi-user.target
