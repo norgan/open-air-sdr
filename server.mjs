@@ -98,6 +98,7 @@ export function parseAcars(when, input, mode=0) {
   const raw = Buffer.isBuffer(input) ? input : Buffer.from(input);
   let data = raw;
   const plain = raw.toString('utf8').trim();
+  const rawFrame = (/^[\x20-\x7e\r\n\t]*$/.test(plain) ? plain : raw.toString('hex')).slice(0,8192);
   if (/^(?:[0-9a-f]{2}){10,}$/i.test(plain)) data = Buffer.from(plain,'hex');
   if (plain.startsWith('{')) {
     try {
@@ -106,7 +107,7 @@ export function parseAcars(when, input, mode=0) {
       const detail=json.text ?? json.message ?? json.msg;
       if (title || typeof detail==='string'){
         return {title:String(title||'Aircraft message').slice(0,40),tag:String(json.label||'DATA').slice(0,8),
-          detail:String(detail||'Decoded message').slice(0,500),time:when};
+          detail:String(detail||'Decoded message').slice(0,4096),raw:rawFrame,time:when};
       }
     } catch {}
   }
@@ -118,28 +119,44 @@ export function parseAcars(when, input, mode=0) {
     if (/^[A-Z0-9-]{3,7}$/.test(registration) && tag.length===2) {
       const textStart=bytes.indexOf(2,start+12);
       const textEnd=textStart<0?-1:bytes.findIndex((value,index)=>index>textStart&&(value===3||value===23));
-      let detail=textStart<0?'':String.fromCharCode(...bytes.slice(textStart+1,textEnd<0?Math.min(bytes.length-3,textStart+501):textEnd));
+      let detail=textStart<0?'':String.fromCharCode(...bytes.slice(textStart+1,textEnd<0?Math.min(bytes.length-3,textStart+4097):textEnd));
       detail=detail.replace(/[^\x20-\x7e\n\r\t]/g,'').trim();
-      return {title:registration,tag,detail:detail||'Link acknowledgement or short data frame.',time:when};
+      return {title:registration,tag,detail:detail||'Link acknowledgement or short data frame.',raw:rawFrame,time:when};
     }
   }
-  if(data.length>0 && mode===1) return {title:'VDL Mode 2 frame',tag:'VDL2',detail:data.length+' bytes received by the decoder.',time:when};
+  if(data.length>0 && mode===1) return {title:'VDL Mode 2 frame',tag:'VDL2',detail:data.length+' bytes received by the decoder.',raw:rawFrame,time:when};
   return null;
 }
 
 function finite(value) { return typeof value==='number'&&Number.isFinite(value); }
+function aircraftText(value, limit=24) {
+  return typeof value==='string'&&value.trim() ? value.trim().slice(0,limit) : undefined;
+}
+function aircraftSquawk(value) {
+  if(typeof value==='string'&&/^[0-7]{4}$/.test(value))return value;
+  return Number.isInteger(value)&&value>=0&&value<=7777?String(value).padStart(4,'0'):undefined;
+}
 function aircraftPosition(record, station) {
   const a=record?.aircraftState||{};
   const lat=a.latitude??record?.latitude, lon=a.longitude??record?.longitude;
   const hex=String(a.icao??record?.name??'').toLowerCase();
   if(!/^[0-9a-f]{6}$/.test(hex)||!finite(lat)||!finite(lon)||Math.abs(lat)>90||Math.abs(lon)>180||
     (lat===0&&lon===0))return null;
-  const title=String(a.callsign||a.registration||hex.toUpperCase()).trim()||hex.toUpperCase();
+  const registration=aircraftText(a.registration,12);
+  const aircraftType=aircraftText(a.aircraftType??a.type,12);
+  const title=aircraftText(a.callsign,12)||registration||hex.toUpperCase();
   const alt=a.altitude;
   const heading=finite(a.track)?a.track:finite(a.heading)?a.heading:record.heading;
   const relative=aircraftGeometry(station,lat,lon);
+  Object.assign(relative,{source:'Local receiver',registration,aircraftType,
+    category:aircraftText(a.emitterCategory??a.category),onSurface:typeof a.onSurface==='boolean'?a.onSurface:undefined,
+    altGeom:finite(a.geometricAltitude)?a.geometricAltitude:finite(a.altGeom)?a.altGeom:undefined,
+    navigationHeading:finite(a.navigationHeading)?a.navigationHeading:undefined,
+    speed:finite(a.groundSpeed)&&a.groundSpeed>=0?a.groundSpeed:finite(a.speed)&&a.speed>=0?a.speed:undefined,
+    verticalRate:finite(a.verticalRate)?a.verticalRate:undefined,
+    squawk:aircraftSquawk(a.squawk),emergency:aircraftText(a.emergency??a.emergencyState)});
   return {hex,title,tag:a.onSurface?'GROUND':finite(alt)?alt.toLocaleString('en-AU')+' ft':'—',detail:[
-    a.aircraftType,finite(relative.distanceKm)?relative.distanceKm.toFixed(0)+' km':null
+    aircraftType,finite(relative.distanceKm)?relative.distanceKm.toFixed(0)+' km':null
   ].filter(Boolean).join(' · ')||'ADS-B position',lat,lon,alt,heading,...relative};
 }
 export function localAircraft(record, station, now=Date.now()) {
@@ -162,9 +179,43 @@ export function localAircraftPositions(mapItems, report, station, now=Date.now()
   }
   return [...current.values()].sort((a,b)=>(a.distanceKm??Infinity)-(b.distanceKm??Infinity));
 }
+function localAircraftTrack(aircraftState, station) {
+  const positioned=aircraftPosition({aircraftState},station);
+  if(positioned)return positioned;
+  const a=aircraftState||{};
+  const hex=String(a.icao??'').toLowerCase();
+  if(!/^[0-9a-f]{6}$/.test(hex))return null;
+  const registration=aircraftText(a.registration,12);
+  const aircraftType=aircraftText(a.aircraftType??a.type,12);
+  const title=aircraftText(a.callsign,12)||registration||hex.toUpperCase();
+  const alt=finite(a.altitude)?a.altitude:undefined;
+  const heading=finite(a.track)?a.track:finite(a.heading)?a.heading:undefined;
+  return {hex,title,tag:'NO POSITION',detail:[aircraftType,finite(alt)?alt.toLocaleString('en-AU')+' ft':null,
+    'Waiting for position frames'].filter(Boolean).join(' · '),source:'Local receiver',registration,aircraftType,
+    category:aircraftText(a.emitterCategory??a.category),onSurface:typeof a.onSurface==='boolean'?a.onSurface:undefined,alt,heading,
+    altGeom:finite(a.geometricAltitude)?a.geometricAltitude:finite(a.altGeom)?a.altGeom:undefined,
+    navigationHeading:finite(a.navigationHeading)?a.navigationHeading:undefined,
+    speed:finite(a.groundSpeed)&&a.groundSpeed>=0?a.groundSpeed:finite(a.speed)&&a.speed>=0?a.speed:undefined,
+    verticalRate:finite(a.verticalRate)?a.verticalRate:undefined,squawk:aircraftSquawk(a.squawk),
+    emergency:aircraftText(a.emergency??a.emergencyState)};
+}
+export function localAircraftReceived(positions, report, station) {
+  const received=new Map((Array.isArray(positions)?positions:[]).map(position=>[position.hex,position]));
+  for(const aircraftState of Array.isArray(report)?report:[]){
+    const track=localAircraftTrack(aircraftState,station);
+    if(track&&!received.has(track.hex))received.set(track.hex,track);
+  }
+  return [...received.values()].sort((a,b)=>{
+    const aPosition=finite(a.lat)&&finite(a.lon), bPosition=finite(b.lat)&&finite(b.lon);
+    if(aPosition!==bPosition)return aPosition?-1:1;
+    return (a.distanceKm??Infinity)-(b.distanceKm??Infinity)||String(a.title).localeCompare(String(b.title));
+  });
+}
 export function aircraftFeed(state) {
   return {now:Date.now()/1000,aircraft:state.aircraft.map(a=>({
-    hex:a.hex,flight:a.title,lat:a.lat,lon:a.lon,alt_baro:a.alt,track:a.heading,seen:a.seen,seen_pos:a.seen
+    hex:a.hex,flight:a.title,lat:a.lat,lon:a.lon,alt_baro:a.onSurface?'ground':a.alt,alt_geom:a.altGeom,
+    track:a.heading,nav_heading:a.navigationHeading,gs:a.speed,baro_rate:a.verticalRate,r:a.registration,
+    t:a.aircraftType,category:a.category,squawk:a.squawk,emergency:a.emergency,seen:a.seen,seen_pos:a.seen
   }))};
 }
 
@@ -318,7 +369,7 @@ export class Receiver {
       const radio=await this.inspect();
       const centre=Number(radio.samplingDevice.centerFrequency);
       const running=radio.samplingDevice.state==='running';
-      const base={connected:true,running,frequency:centre,centre,mode:null,bandwidth:null,updated:new Date().toISOString(),aircraft:[],messages:[],activity:[]};
+      const base={connected:true,running,frequency:centre,centre,mode:null,bandwidth:null,updated:new Date().toISOString(),aircraft:[],aircraftReceived:[],messages:[],activity:[]};
       const preferred = this.selectedSource;
       const candidates = [preferred,...[...availableSources,...(this.localPresets??[])].filter(p=>p.id!==preferred?.id)]
         .map(p=>p?.decoder==='ADSBDemod' && p.centre+p.offset===centre ? {...p,centre,offset:0} : p)
@@ -366,6 +417,7 @@ export class Receiver {
       base.spectrum=spectrum?.centerFrequency===centre?spectrum:null;
       if(source?.kind==='aircraft'){
         base.aircraft=localAircraftPositions(map?.items,stats.aircraftState,station);
+        base.aircraftReceived=localAircraftReceived(base.aircraft,stats.aircraftState,station);
         base.adsb={channelSampleRate:stats.channelSampleRate,correlationThreshold:selectedSettings?.correlationThreshold,
           trackedAircraft:Array.isArray(stats.aircraftState)?stats.aircraftState.length:null};
       }
@@ -522,7 +574,8 @@ export class Receiver {
 const assets=new Map([
   ['/','index.html'],['/style.css','style.css'],['/app.js','app.js'],['/sources.mjs','sources.mjs'],
   ['/cb-panel.mjs','cb-panel.mjs'],['/cb-panel.css','cb-panel.css'],['/signal-meter.mjs','signal-meter.mjs'],
-  ['/local-setup.mjs','local-setup.mjs'],['/tower-map.mjs','tower-map.mjs'],['/message-help.mjs','message-help.mjs']
+  ['/local-setup.mjs','local-setup.mjs'],['/tower-map.mjs','tower-map.mjs'],['/message-help.mjs','message-help.mjs'],
+  ['/detail-fields.mjs','detail-fields.mjs']
 ]);
 const contentTypes={html:'text/html',css:'text/css',js:'application/javascript',mjs:'application/javascript'};
 

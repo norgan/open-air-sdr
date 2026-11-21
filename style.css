@@ -141,10 +141,41 @@ body[data-view=messages] :is(.pane-grid,.metrics,#frequency-readout,#scan-mux,#a
 .decoded-history .preset-search{margin:0 15px 14px}
 .decoded-history .activity-list{max-height:68vh}
 .decoded-history .item-header small{white-space:normal}
+.aircraft-record{border-bottom:1px solid var(--line)}
+.aircraft-record:last-child{border-bottom:0}
+.aircraft-record>.activity-item{border:0;cursor:pointer;list-style:none}
+.aircraft-record>.activity-item::-webkit-details-marker{display:none}
+.aircraft-record>.activity-item::after{content:"";width:8px;height:8px;flex:none;border-right:2px solid var(--accent2);border-bottom:2px solid var(--accent2);transform:rotate(45deg);margin:8px 3px 0 5px}
+.aircraft-record[open]>.activity-item::after{transform:rotate(225deg);margin-top:12px}
+.aircraft-record>.activity-item:hover{background:#20282d}
+.aircraft-record>.activity-item:focus-visible{outline:2px solid var(--accent);outline-offset:-3px}
+.aircraft-record-content{margin:0 12px 12px 51px;padding:11px 12px 12px;border:1px solid var(--line);border-radius:8px;background:#12171e}
+.aircraft-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:10px;margin:0}
+.aircraft-fields div{min-width:0}
+.aircraft-fields dt{color:var(--weak);font:10px var(--mono);letter-spacing:.45px;text-transform:uppercase}
+.aircraft-fields dd{margin:4px 0 0;color:var(--text);font-size:12px;overflow-wrap:anywhere}
+.message-record{border-bottom:1px solid var(--line)}
+.message-record:last-child{border-bottom:0}
+.message-record>.activity-item{border:0;cursor:pointer;list-style:none}
+.message-record>.activity-item::-webkit-details-marker{display:none}
+.message-record>.activity-item::after{content:"";width:8px;height:8px;flex:none;border-right:2px solid var(--accent2);border-bottom:2px solid var(--accent2);transform:rotate(45deg);margin:8px 3px 0 5px}
+.message-record[open]>.activity-item::after{transform:rotate(225deg);margin-top:12px}
+.message-record>.activity-item:hover{background:#20282d}
+.message-record>.activity-item:focus-visible{outline:2px solid var(--accent);outline-offset:-3px}
+.message-record .item-detail{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+.message-record-content{margin:0 12px 12px 51px;padding:11px 12px 12px;border:1px solid var(--line);border-radius:8px;background:#12171e}
+.message-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:10px;margin:0 0 13px}
+.message-fields div{min-width:0}
+.message-fields dt{color:var(--weak);font:10px var(--mono);letter-spacing:.45px;text-transform:uppercase}
+.message-fields dd{margin:4px 0 0;color:var(--text);font-size:12px;overflow-wrap:anywhere}
+.message-record-content h3{margin:0 0 6px;color:var(--weak);font:10px var(--mono);letter-spacing:.45px;text-transform:uppercase}
+.message-record-content pre{max-height:18rem;margin:0;padding:9px 10px;overflow:auto;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--text);font:11px/1.5 var(--mono);white-space:pre-wrap;overflow-wrap:anywhere}
+.message-record-content pre+h3{margin-top:12px}
 .message-help{margin-top:6px;color:var(--muted);font-size:12px}
 .message-help summary{width:max-content;color:var(--accent2);cursor:pointer}
 .message-help div{margin-top:5px;padding:6px 9px;border-left:2px solid var(--accent2);background:var(--bg);border-radius:3px}
 .message-help p{margin:4px 0;line-height:1.45}
+@media(max-width:600px){.aircraft-record-content,.message-record-content{margin-left:12px}.aircraft-fields,.message-fields{grid-template-columns:1fr 1fr}}
 @media(max-width:790px){.view-nav{flex-wrap:wrap}}
 .setup-panel fieldset {
   min-width: 0;

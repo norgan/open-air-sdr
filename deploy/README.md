@@ -6,7 +6,7 @@ Use the Debian 13 LXC template in an unprivileged Proxmox container. The RTL-SDR
 
 On the Proxmox host, use `lsusb` and `lsusb -t` to identify the SDR. Pass that specific node through with `pct set <CTID> --dev0 path=/dev/bus/usb/001/002,gid=46,mode=0660`, substituting the actual bus and device numbers. The device number may change after the dongle is unplugged. Debian's `plugdev` group is GID 46 in this deployment.
 
-Inside the container, test with `lsusb -d 0bda:2832` and `timeout 8 rtl_test`. A timeout is expected while samples are flowing. If opening the receiver reports that it is busy and the host shows `dvb_usb_rtl28xxu` bound to the tuner on port `1-2`, unbind that interface on the Proxmox host with `printf '%s' '1-2:1.0' > /sys/bus/usb/drivers/dvb_usb_rtl28xxu/unbind` and retry.
+Inside the container, test with `lsusb -d 0bda:2832` and `timeout 8 rtl_test`. A timeout is expected while samples are flowing. If opening the receiver reports that it is busy, identify the tuner's interface with `lsusb -t`. If `dvb_usb_rtl28xxu` owns it, unbind that specific interface on the Proxmox host with `printf '%s' '<USB_INTERFACE>' > /sys/bus/usb/drivers/dvb_usb_rtl28xxu/unbind`, replacing `<USB_INTERFACE>` with the identified interface, then retry.
 
 ## Install
 
@@ -37,6 +37,8 @@ journalctl -u sdrangelsrv -u open-air -n 60 --no-pager
 curl -fsS http://127.0.0.1:8877/api/health
 ```
 
-In **Signals**, choose an FM station and click **Listen**. In **Receiver**, confirm the frequency, resize the waterfall and sweep a short frequency range. In **Tower**, check that AM audio and the network aircraft positions update together. Start the ATC scan and confirm it holds on a transmission before moving on. In **UHF CB**, step between channels and start a scan. Choose a known channel to stop the scan. Select ADS-B in **Signals** to check your antenna’s position reports. Switch away from ACARS and confirm its entries remain in **Messages**.
+In **Signals**, choose an FM station and click **Listen**. In **Receiver**, confirm the frequency, resize the waterfall and sweep a short frequency range. In **Tower**, check that AM audio and the network aircraft positions update together. Start the ATC scan and confirm it holds on a transmission before moving on. In **UHF CB**, step between channels and start a scan. Choose a known channel to stop the scan. Select ADS-B in **Signals** to check your antenna's local decoder tracks, including any **NO POSITION** partial tracks. Switch away from ACARS and confirm its entries remain in **Messages**.
+
+One tuner cannot remain on airband voice and 1090 MHz at the same time. Tower therefore combines local ATC audio with independent network aircraft positions. Simultaneous local ATC and local ADS-B requires a second receiver.
 
 The server writes your area profile and decoded message history under the `openair` user’s `open-air-data` directory. Set `OPEN_AIR_ADSB_LOL_API_KEY` in `/etc/open-air.env` if you have an adsb.lol key, then restart `open-air.service`. The server only polls for network aircraft while a Tower view is open. [adsb.lol API limits](https://www.adsb.lol/docs/open-data/api)

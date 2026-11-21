@@ -10,7 +10,9 @@ import {appServer, Receiver} from './server.mjs';
 import {sources} from './sources.mjs';
 
 const centre={latitude:10,longitude:20};
-const aircraft={hex:'abc123',flight:' TEST123 ',lat:10.01,lon:20.02,seen_pos:1,alt_baro:2500,track:95};
+const aircraft={hex:'abc123',flight:' TEST123 ',lat:10.01,lon:20.02,seen_pos:1,alt_baro:2500,
+  alt_geom:2580,track:95,nav_heading:96,t:'A320',r:'VH-ABC',category:'A3',gs:238.5,
+  baro_rate:-640,squawk:'1200',emergency:'none'};
 
 test('network positions are shared, scoped to the map centre and expire after a quota response',async()=>{
   let time=Date.parse('2026-11-21T08:00:00Z');
@@ -28,6 +30,15 @@ test('network positions are shared, scoped to the map centre and expire after a 
   assert.deepEqual(first,shared);
   assert.equal(first.aircraft.length,1);
   assert.equal(first.aircraft[0].title,'TEST123');
+  assert.equal(first.aircraft[0].source,'adsb.lol');
+  assert.equal(first.aircraft[0].registration,'VH-ABC');
+  assert.equal(first.aircraft[0].aircraftType,'A320');
+  assert.equal(first.aircraft[0].alt,2500);
+  assert.equal(first.aircraft[0].altGeom,2580);
+  assert.equal(first.aircraft[0].speed,238.5);
+  assert.equal(first.aircraft[0].verticalRate,-640);
+  assert.equal(first.aircraft[0].squawk,'1200');
+  assert.equal(first.aircraft[0].seen,1);
   assert.ok(first.aircraft[0].distanceKm>2 && first.aircraft[0].distanceKm<3);
   time+=16_000;
   assert.equal((await load(centre)).status,'rate-limited');
@@ -48,9 +59,25 @@ test('the archive retains the latest 500 frames across process instances and ded
   await archive.append([next]);
   const result=await createMessageArchive(path).read();
   assert.equal(result.messages.length,messageLimit);
-  assert.deepEqual(result.messages[0],next);
-  assert.deepEqual(result.messages[1],received[1]);
+  assert.match(result.messages[0].id,/^[0-9a-f]{24}$/);
+  assert.deepEqual({...result.messages[0],id:undefined},{...next,id:undefined});
+  assert.deepEqual({...result.messages[1],id:undefined},{...received[1],id:undefined});
+  assert.equal(result.messages[0].id,(await archive.read()).messages[0].id);
   assert.equal(result.warning,'');
+});
+
+test('legacy message archives gain stable identities without requiring raw frames',async t=>{
+  const dir=await mkdtemp(join(tmpdir(),'open-air-legacy-messages-'));
+  t.after(()=>rm(dir,{recursive:true,force:true}));
+  const path=join(dir,'messages.json');
+  const legacy={title:'Legacy aircraft',tag:'Q0',detail:'ACK',mode:'acars',frequency:131_550_000,time:'2026-11-20T08:00:00Z'};
+  await writeFile(path,JSON.stringify([legacy]));
+  const first=await createMessageArchive(path).read();
+  const second=await createMessageArchive(path).read();
+  assert.deepEqual({...first.messages[0],id:undefined},{...legacy,id:undefined});
+  assert.equal(first.messages[0].raw,undefined);
+  assert.match(first.messages[0].id,/^[0-9a-f]{24}$/);
+  assert.equal(second.messages[0].id,first.messages[0].id);
 });
 
 test('leaving an ACARS channel archives the unflushed capture before removing its log',async t=>{
@@ -72,14 +99,18 @@ test('leaving an ACARS channel archives the unflushed capture before removing it
   receiver.captureFrequency=131_554_000;
   await receiver.releaseCapture();
   const result=await archive.read();
-  assert.deepEqual(result.messages,[{mode:'acars',frequency:131_554_000,time,title:'VH-XYZ',tag:'H1',detail:'TEST AIRFRAME'}]);
+  assert.equal(result.messages.length,1);
+  assert.match(result.messages[0].id,/^[0-9a-f]{24}$/);
+  assert.deepEqual({...result.messages[0],id:undefined},{
+    mode:'acars',frequency:131_554_000,time,title:'VH-XYZ',tag:'H1',detail:'TEST AIRFRAME',raw:frame.toString('hex'),id:undefined
+  });
   assert.equal(settings.logEnabled,0);
   await assert.rejects(stat(capture),{code:'ENOENT'});
 });
 
 test('message help expands verified codes and recognises coordinates without guessing numeric fields',()=>{
-  assert.match(explainMessage({tag:'QQ',detail:'YSSYOTHH'}).summary,/Departure report/);
-  assert.match(explainMessage({tag:'49',detail:'TEST YSSYOTHH'}).fields[0],/Sydney Kingsford Smith and Doha Hamad/);
+  assert.match(explainMessage({tag:'QQ',detail:'SYNTHETIC DEPARTURE'}).summary,/Departure report/);
+  assert.match(explainMessage({tag:'49',detail:'TEST YMMLYBBN'}).fields[0],/Melbourne and Brisbane/);
   const position=explainMessage({tag:'16',detail:'M98AQR000K-,S 21.500,E 120.750,999,999'});
   assert.match(position.summary,/position report/);
   assert.ok(position.fields.some(line=>line.includes('21.500° S, 120.750° E')));

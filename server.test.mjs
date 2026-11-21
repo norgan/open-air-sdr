@@ -1,12 +1,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { Mcp, Receiver, aircraftFeed, audioUpdate, localAircraft, localAircraftPositions, parseAcars, appServer, desktopSpectrumPort } from './server.mjs';
+import { Mcp, Receiver, aircraftFeed, audioUpdate, localAircraft, localAircraftPositions, localAircraftReceived, parseAcars, appServer, desktopSpectrumPort } from './server.mjs';
 import { catalogue, customSource, formatMHz, sources } from './sources.mjs';
 import { spectrumRow } from './streams.mjs';
 import { configureReceiver } from './deploy/bootstrap.mjs';
 
-const point = {name:'abc123',latitude:10.275,longitude:20.1,aircraftState:{altitude:6900,callsign:'TEST123'}};
+const point = {name:'abc123',latitude:10.275,longitude:20.1,aircraftState:{altitude:6900,
+  geometricAltitude:7025,callsign:'TEST123',registration:'VH-TST',aircraftType:'A320',emitterCategory:'A3',
+  track:94,groundSpeed:245.5,verticalRate:-512,squawk:'1200',emergency:'none'}};
 const instant=Date.parse('2026-11-21T03:00:00Z');
 
 test('aircraft feed uses only current positions and keeps local range',()=>{
@@ -14,9 +16,20 @@ test('aircraft feed uses only current positions and keeps local range',()=>{
   assert.equal(localAircraft({...point,positionDateTime:'2026-11-21T02:58:00Z'},station,instant),null);
   const local=localAircraft({...point,positionDateTime:'2026-11-21T02:59:45Z'},station,instant);
   assert.equal(local.title,'TEST123');
+  assert.equal(local.source,'Local receiver');
+  assert.equal(local.registration,'VH-TST');
+  assert.equal(local.aircraftType,'A320');
+  assert.equal(local.altGeom,7025);
+  assert.equal(local.speed,245.5);
+  assert.equal(local.verticalRate,-512);
+  assert.equal(local.squawk,'1200');
   assert.ok(local.distanceKm>30&&local.distanceKm<35);
   const feed=aircraftFeed({aircraft:[local]});
   assert.equal(feed.aircraft[0].alt_baro,6900);
+  assert.equal(feed.aircraft[0].alt_geom,7025);
+  assert.equal(feed.aircraft[0].r,'VH-TST');
+  assert.equal(feed.aircraft[0].t,'A320');
+  assert.equal(feed.aircraft[0].gs,245.5);
   assert.equal(feed.aircraft[0].seen_pos,15);
 });
 
@@ -33,6 +46,14 @@ test('local ADS-B uses direct decoder positions when map items are unavailable',
   assert.equal(positions.length,1);
   assert.equal(positions[0].title,'TEST123');
   assert.equal(positions[0].seen,15);
+  const received=localAircraftReceived(positions,tracker,station);
+  assert.equal(received.length,2);
+  assert.equal(received[0].title,'TEST123');
+  assert.equal(received[1].title,'NO-POSITION');
+  assert.equal(received[1].tag,'NO POSITION');
+  assert.match(received[1].detail,/Waiting for position frames/);
+  assert.equal(received[1].lat,undefined);
+  assert.equal(aircraftFeed({aircraft:positions}).aircraft.length,1);
 });
 
 test('SDRangel hex capture strips parity and extracts ACARS heading and text',()=>{
@@ -41,6 +62,15 @@ test('SDRangel hex capture strips parity and extracts ACARS heading and text',()
   assert.equal(msg.title,'VH-ABC');
   assert.equal(msg.tag,'H1');
   assert.equal(msg.detail,'CHECK IN');
+  assert.equal(msg.raw,frame.toString('hex'));
+  const vdl2=parseAcars('2026-11-21T14:34:00',Buffer.from([1,2,3]),1);
+  assert.equal(vdl2.raw,'010203');
+  assert.equal(vdl2.detail,'3 bytes received by the decoder.');
+  const longText='A'.repeat(900);
+  const json=JSON.stringify({registration:'VH-LONG',label:'49',text:longText});
+  const detailed=parseAcars('2026-11-21T14:35:00',json);
+  assert.equal(detailed.detail,longText);
+  assert.equal(detailed.raw,json);
   assert.equal(parseAcars('', 'unrecognised bytes'),null);
 });
 
@@ -101,7 +131,9 @@ test('source switch configures the live receiver and confirms the ADS-B setting'
   assert.equal(settings.rfBandwidth,2000000);
   assert.ok(settings.rfBandwidth < radio.devSampleRate);
   assert.equal(current.aircraft.length,1);
+  assert.equal(current.aircraftReceived.length,1);
   assert.equal(settings.correlationThreshold,5);
+  assert.equal(radio.gain,197);
   assert.equal(sources.find(p=>p.id==='acars').centre+sources.find(p=>p.id==='acars').offset,131554000);
   assert.ok(!changes.some(([name])=>name==='delete_channel'));
   changes.length=0;

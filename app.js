@@ -1,6 +1,7 @@
 import { sources, availableSources, customSource, formatMHz, isAirbandScanChannel, isAirbandVoice, isSydneyPreset, localSource, receiverModes, sample } from '/sources.mjs';
 import { createCbPanel } from '/cb-panel.mjs';
 import { createLocalSetup } from '/local-setup.mjs';
+import { aircraftDetailFields, messageDetailFields, messageDetailKey } from '/detail-fields.mjs';
 import { explainMessage } from '/message-help.mjs';
 import { estimateSignal } from '/signal-meter.mjs';
 import { aircraftOutline, createTowerMap } from '/tower-map.mjs';
@@ -1206,9 +1207,94 @@ function formattedTime(value) {
   const d = new Date(value);
   return Number.isFinite(d.getTime()) ? d.toLocaleTimeString('en-AU', {hour12:false, timeZoneName:'short'}) : '';
 }
+function aircraftRecord(item,row,openRecords) {
+  const key=JSON.stringify([item.hex||'',item.registration||'',item.title||'',item.source||'']);
+  const record=document.createElement('details');
+  const summary=document.createElement('summary');
+  const body=document.createElement('div');
+  const facts=document.createElement('dl');
+  record.className='aircraft-record';
+  record.dataset.aircraft=key;
+  record.open=openRecords.has(key);
+  summary.className='activity-item';
+  summary.title='Open aircraft details';
+  const compact=row.querySelector('.activity-item');
+  summary.append(...compact.childNodes);
+  body.className='aircraft-record-content';
+  facts.className='aircraft-fields';
+  for(const {label,value} of aircraftDetailFields(item)) {
+    const field=document.createElement('div');
+    const term=document.createElement('dt');
+    const description=document.createElement('dd');
+    term.textContent=label;
+    description.textContent=value;
+    field.append(term,description);
+    facts.append(field);
+  }
+  body.append(facts);
+  record.append(summary,body);
+  return record;
+}
+function messageRecord(item,row,openRecords,openHelp) {
+  const key=item.id||messageDetailKey(item);
+  const record=document.createElement('details');
+  const summary=document.createElement('summary');
+  const body=document.createElement('div');
+  const facts=document.createElement('dl');
+  const payloadLabel=document.createElement('h3');
+  const payload=document.createElement('pre');
+  record.className='message-record';
+  record.dataset.message=key;
+  record.open=openRecords.has(key);
+  summary.className='activity-item';
+  summary.title='Open message details';
+  const compact=row.querySelector('.activity-item');
+  summary.append(...compact.childNodes);
+  body.className='message-record-content';
+  facts.className='message-fields';
+  for(const {label,value} of messageDetailFields(item)) {
+    const field=document.createElement('div');
+    const term=document.createElement('dt');
+    const description=document.createElement('dd');
+    term.textContent=label;
+    description.textContent=value;
+    field.append(term,description);
+    facts.append(field);
+  }
+  payloadLabel.textContent='Decoded payload';
+  payload.textContent=item.detail||'No decoded payload text was reported.';
+  const {summary:meaning,fields}=explainMessage(item);
+  const help=document.createElement('details');
+  const trigger=document.createElement('summary');
+  const explanation=document.createElement('div');
+  help.className='message-help';
+  help.dataset.message=key;
+  help.open=openHelp.has(key);
+  trigger.textContent='Meaning';
+  trigger.title=[meaning,...fields].join('\n');
+  for(const line of [meaning,...fields]) {
+    const paragraph=document.createElement('p');
+    paragraph.textContent=line;
+    explanation.append(paragraph);
+  }
+  help.append(trigger,explanation);
+  body.append(facts,payloadLabel,payload);
+  if(item.raw&&item.raw!==item.detail) {
+    const rawLabel=document.createElement('h3');
+    const raw=document.createElement('pre');
+    rawLabel.textContent='Raw frame';
+    raw.textContent=item.raw;
+    body.append(rawLabel,raw);
+  }
+  body.append(help);
+  record.append(summary,body);
+  return record;
+}
 function rows(items, kind, emptyText, list = $('activity'), limit = 24) {
   const content=document.createDocumentFragment();
   const openHelp=new Set(Array.from(list.querySelectorAll('.message-help[open]'),node=>node.dataset.message));
+  const openMessages=new Set(Array.from(list.querySelectorAll('.message-record[open]'),node=>node.dataset.message));
+  const openAircraft=new Set(Array.from(list.querySelectorAll('.aircraft-record[open]'),node=>node.dataset.aircraft));
   if (!items.length) {
     const empty = document.createElement('div');
     empty.className = 'empty';
@@ -1222,23 +1308,13 @@ function rows(items, kind, emptyText, list = $('activity'), limit = 24) {
     row.querySelector('strong').textContent = item.title || 'Received signal';
     row.querySelector('small').textContent = item.tag || '';
     row.querySelector('.item-detail').textContent = item.detail || '';
+    if (kind==='aircraft') {
+      content.append(aircraftRecord(item,row,openAircraft));
+      continue;
+    }
     if (kind==='message') {
-      const {summary,fields}=explainMessage(item);
-      const help=document.createElement('details');
-      const trigger=document.createElement('summary');
-      const explanation=document.createElement('div');
-      help.className='message-help';
-      help.dataset.message=JSON.stringify([item.title,item.rawLabel??item.tag,item.time,item.detail]);
-      help.open=openHelp.has(help.dataset.message);
-      trigger.textContent='Meaning';
-      trigger.title=[summary,...fields].join('\n');
-      for(const line of [summary,...fields]) {
-        const paragraph=document.createElement('p');
-        paragraph.textContent=line;
-        explanation.append(paragraph);
-      }
-      help.append(trigger,explanation);
-      row.querySelector('.item-body').append(help);
+      content.append(messageRecord(item,row,openMessages,openHelp));
+      continue;
     }
     content.append(row);
   }
@@ -1319,11 +1395,11 @@ function radar(items, accessibleLabel = 'Relative positions of aircraft received
   $('radar').replaceChildren(svg);
 }
 
-const sampleTowerCentre = {latitude:-33.95, longitude:151.18};
+const sampleTowerCentre = {latitude:0, longitude:0};
 const sampleTowerAircraft = sample('adsb').aircraft.map((item,index) => {
   const direction=item.bearing*Math.PI/180;
   return {...item,hex:String(index),lat:sampleTowerCentre.latitude+item.distanceKm*Math.cos(direction)/111,
-    lon:sampleTowerCentre.longitude+item.distanceKm*Math.sin(direction)/92};
+    lon:sampleTowerCentre.longitude+item.distanceKm*Math.sin(direction)/111};
 });
 
 function drawTowerTraffic(demo) {
@@ -1334,7 +1410,7 @@ function drawTowerTraffic(demo) {
   $('tower-show-map').setAttribute('aria-pressed',String(map));
   $('tower-show-radar').setAttribute('aria-pressed',String(!map));
   $('stage-title').textContent=map ? 'Aircraft map' : 'Aircraft radar';
-  $('stage-caption').textContent=demo ? 'Sample aircraft around Sydney' : (localArea?.name || 'Local area');
+  $('stage-caption').textContent=demo ? 'Sample aircraft positions' : (localArea?.name || 'Local area');
   $('stage-tag').textContent=demo ? 'SAMPLE' : status==='live' ? 'LIVE NETWORK' : 'NETWORK';
   $('activity-title').textContent='Aircraft with positions';
   const updated=towerAircraft?.updated ? formattedTime(towerAircraft.updated) : '';
@@ -1435,9 +1511,15 @@ function render(next) {
   document.body.dataset.state = demo?'demo':active?'live':'offline';
   $('live-label').textContent = demo?'SAMPLE DATA':active?'LIVE FROM YOUR ANTENNA':next.connected?'RECEIVER STOPPED':'RECEIVER OFFLINE';
   $('side-status').textContent = demo?'Sample data':active?'Receiver connected':next.connected?'Receiver stopped':'Receiver unavailable';
-  $('title').textContent = {signals:'Known signals',receiver:'Receiver',tower:'Tower','uhf-cb':'Australian UHF CB',messages:'Messages',setup:'Local setup'}[view];
+  $('title').textContent = view === 'signals'
+    ? (source?.name || next.sourceName || 'Signals')
+    : {receiver:'Receiver',tower:'Tower','uhf-cb':'Australian UHF CB',messages:'Messages',setup:'Local setup'}[view];
   $('section-name').textContent = viewTitles[view];
-  $('subtitle').textContent = view === 'uhf-cb' ? '' : (source?.name || next.sourceName || '');
+  $('subtitle').textContent = view === 'signals'
+    ? 'Known signals'
+    : view === 'uhf-cb'
+      ? ''
+      : (source?.name || next.sourceName || '');
   $('subtitle').hidden = !$('subtitle').textContent;
   $('frequency').textContent = Number.isFinite(next.frequency) ? formatMHz(next.frequency) : '—';
   $('scan-mux').hidden = !source?.scanWidth || demo;
@@ -1450,10 +1532,14 @@ function render(next) {
   renderRangeScan();
   syncLocalSetup();
   syncTowerControls();
-  const items = kind==='aircraft'?(next.aircraft || []):kind==='message'?(next.messages || []):(next.activity || []);
+  const positionedAircraft=kind==='aircraft'?(next.aircraft || []):[];
+  const receivedAircraft=kind==='aircraft'?(next.aircraftReceived || positionedAircraft):[];
+  const items = kind==='aircraft'?positionedAircraft:kind==='message'?(next.messages || []):(next.activity || []);
+  const decoderTracks=kind==='aircraft' ? Math.max(positionedAircraft.length,receivedAircraft.length,
+    Number.isFinite(next.adsb?.trackedAircraft)?next.adsb.trackedAircraft:0) : 0;
   const metrics = kind==='aircraft' ? [
-    [active||demo?number(items.length):'—','Aircraft with positions'],
-    [distance(Math.max(-Infinity,...items.map(x=>x.distanceKm ?? -Infinity))),'Farthest aircraft'],
+    [active||demo?number(decoderTracks):'-','Decoder tracks'],
+    [active||demo?number(positionedAircraft.length):'-','Aircraft with positions'],
     [power(next.channelPower),'Channel power']
   ] : kind==='message' ? [
     [active||demo?number(items.length):'—','Recent messages'],
@@ -1484,8 +1570,12 @@ function render(next) {
   $('activity-caption').textContent=kind==='aircraft'?'Positions broadcast by aircraft':kind==='message'?'Newest messages first':kind==='spectrum'?'Spectrum only':streamOptions.audio?'Audio from your receiver':'Audio plays through SDRangel';
   if (kind==='aircraft' && next.adsb) {
     const {channelSampleRate,correlationThreshold,trackedAircraft}=next.adsb;
+    const tracked=Number.isFinite(trackedAircraft)?Math.max(trackedAircraft,receivedAircraft.length):decoderTracks;
+    const awaiting=Math.max(0,tracked-positionedAircraft.length);
     const diagnostics=[
-      Number.isFinite(trackedAircraft) && `${trackedAircraft} tracked by decoder`,
+      `${tracked} decoded ${tracked===1?'track':'tracks'}`,
+      awaiting>0 && `${awaiting} awaiting position frames`,
+      tracked>0 && awaiting===0 && `${positionedAircraft.length} with positions`,
       Number.isFinite(channelSampleRate) && `${(channelSampleRate/1e6).toFixed(2)} MS/s delivered`,
       Number.isFinite(correlationThreshold) && `Correlation ${correlationThreshold}`,
     ].filter(Boolean);
@@ -1496,7 +1586,7 @@ function render(next) {
   const empty = $('stage-empty');
   empty.hidden=showRadar||Boolean(graph?.power?.length);
   empty.textContent=active?'Waiting for a spectrum reading.': 'Waiting for the SDRangel receiver.';
-  if(showRadar) radar(items); else spectrum(graph);
+  if(showRadar) radar(positionedAircraft); else spectrum(graph);
   if (view==='receiver' && active && !demo && !busy && !streamOnline && graph?.power?.length &&
       Number.isFinite(graph.startFrequency) && Number.isFinite(graph.stopFrequency) && next.updated !== lastSnapshotRow) {
     lastSnapshotRow = next.updated;
@@ -1504,7 +1594,12 @@ function render(next) {
     drawWaterfall({centre:graph.startFrequency+span/2, span, power:graph.power});
     $('waterfall-frequency').textContent += ' · sampled live spectrum';
   }
-  rows(items,kind);
+  const emptyText=kind==='aircraft' && active
+    ? decoderTracks>0
+      ? 'Aircraft frames are decoding, but none has supplied a complete position yet.'
+      : 'No aircraft frames decoded yet. Check the 1090 MHz antenna path and line of sight.'
+    : undefined;
+  rows(kind==='aircraft'?receivedAircraft:items,kind,emptyText);
 }
 
 new ResizeObserver(()=>spectrum(lastSpectrum)).observe(scope);

@@ -15,19 +15,35 @@ export function aircraftGeometry(centre, latitude, longitude) {
 }
 
 function position(record, centre, time) {
-  const {hex, lat, lon, seen_pos: age, flight, alt_baro: altitude, track, t: type} = record ?? {};
+  const {hex, lat, lon, seen_pos: age, flight, alt_baro: altitude, alt_geom: geometricAltitude,
+    track, nav_heading: navigationHeading, t: type, r: registration, category, gs: groundSpeed,
+    baro_rate: barometricRate, geom_rate: geometricRate, squawk, emergency} = record ?? {};
   if (typeof hex !== 'string' || !/^~?[0-9a-f]{6}$/i.test(hex) ||
       !Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180 ||
       (lat === 0 && lon === 0) || !Number.isFinite(age) || age < 0 || age * 1000 > positionLifetime) return null;
   const relative = aircraftGeometry(centre, lat, lon);
   if (relative.distanceKm > radiusNm * 1.852) return null;
+  const text = (value, limit) => typeof value === 'string' && value.trim() ? value.trim().slice(0, limit) : undefined;
+  const ident = text(flight, 12);
+  const reg = text(registration, 12);
+  const aircraftType = text(type, 12);
+  const reportedAt = time - age * 1000;
+  const rate = Number.isFinite(barometricRate) ? barometricRate : Number.isFinite(geometricRate) ? geometricRate : undefined;
+  const code = typeof squawk === 'string' && /^[0-7]{4}$/.test(squawk) ? squawk :
+    Number.isInteger(squawk) && squawk >= 0 && squawk <= 7777 ? String(squawk).padStart(4, '0') : undefined;
   return {
-    hex, lat, lon,
-    title: (typeof flight === 'string' && flight.trim().slice(0, 12)) || hex.toUpperCase(),
+    hex:hex.toLowerCase(), lat, lon,
+    title: ident || reg || hex.toUpperCase(),
     tag: altitude === 'ground' ? 'GROUND' : Number.isFinite(altitude) ? altitude.toLocaleString('en-AU') + ' ft' : '',
     detail: [typeof type === 'string' && type.slice(0, 12), relative.distanceKm.toFixed(0) + ' km'].filter(Boolean).join(' · '),
+    source:'adsb.lol', registration:reg, aircraftType, category:text(category, 12),
+    onSurface:altitude === 'ground', alt:Number.isFinite(altitude) ? altitude : undefined,
+    altGeom:Number.isFinite(geometricAltitude) ? geometricAltitude : undefined,
     heading: Number.isFinite(track) ? track : null,
-    reportedAt: time - age * 1000,
+    navigationHeading:Number.isFinite(navigationHeading) ? navigationHeading : undefined,
+    speed:Number.isFinite(groundSpeed) && groundSpeed >= 0 ? groundSpeed : undefined,
+    verticalRate:rate, squawk:code, emergency:text(emergency, 24), seen:age,
+    reportedAt, position:reportedAt,
     ...relative,
   };
 }

@@ -2,9 +2,11 @@
 
 Open Air runs an RTL-SDR receiver through headless SDRangel. From your browser you can tune signals, listen, inspect the live waterfall, switch between the last two channels, and scan a frequency range or Australian UHF CB channels. The Home Assistant integration connects to the same server for receiver controls and automations.
 
-**Tower** brings AM airband audio and live aircraft positions together. Select a channel or scan the area's AM airband presets. The scan holds on open squelch, then resumes after 1.5 seconds of silence. Switch between **Map** and **Radar** while listening. The receiver handles audio and adsb.lol supplies the positions independently. The map uses OpenStreetMap. [Aircraft data and API limits](https://www.adsb.lol/docs/open-data/api) · [Map attribution](https://www.openstreetmap.org/copyright)
+**Tower** brings AM airband audio and live aircraft positions together. Select a channel or scan the area's AM airband presets. The scan holds on open squelch, then resumes after 1.5 seconds of silence. Switch between **Map** and **Radar** while listening. The receiver handles audio and adsb.lol supplies the positions independently. Open an aircraft row for its ICAO address, type, position, altitude, speed and other available fields. The map uses OpenStreetMap. [Aircraft data and API limits](https://www.adsb.lol/docs/open-data/api) · [Map attribution](https://www.openstreetmap.org/copyright)
 
-**Messages** keeps the latest 500 decoded ACARS and VDL Mode 2 messages on your receiver server. Use **Meaning** to inspect recognised labels, positions, airport codes and system identifiers while keeping the original text visible. [ACARS application formats](https://github.com/szpajder/libacars/blob/master/doc/PROG_GUIDE.md) · [Message labels](https://github.com/brmlab/acarsdec/blob/master/datasets/acars_mls.txt)
+One tuner cannot stay on airband voice and 1090 MHz simultaneously. Tower uses network positions for that reason. Receiving both ATC and ADS-B locally at the same time requires a second receiver.
+
+**Messages** keeps the latest 500 decoded ACARS and VDL Mode 2 messages on your receiver server. Open a message to inspect its metadata, complete decoded payload, raw frame and **Meaning** notes for recognised labels, positions, airport codes and system identifiers. [ACARS application formats](https://github.com/szpajder/libacars/blob/master/doc/PROG_GUIDE.md) · [Message labels](https://github.com/brmlab/acarsdec/blob/master/datasets/acars_mls.txt)
 
 In **Receiver**, drag the lower edge of the waterfall or focus the handle and use the arrow keys to resize it. The browser remembers the height.
 
@@ -53,7 +55,7 @@ If a short scan misses a known station, check its signal on the waterfall, then 
 
 For file-based provisioning, copy [the area profile example](examples/local-profile.json), edit it for your own region, and point `OPEN_AIR_PROFILE_FILE` to the copy in the receiver environment. Keep deployed profiles and access credentials local to the installation.
 
-Set **Tower map centre** in **Setup** to a nearby airport or city. The receiver server sends that centre to adsb.lol when the view is open. You can set `OPEN_AIR_ADSB_LOL_API_KEY` in `/etc/open-air.env` to use your own provider quota. To see what your antenna receives at 1090 MHz, select **ADS-B** in **Signals**. Open Air offsets the tuner centre by 100 kHz while the decoder stays at 1090 MHz. This moves the decoder off the tuner’s centre spur. The ADS-B filter is 2 MHz at 2.4 MS/s, and aircraft positions come from SDRangel’s map and decoder reports.
+Set **Tower map centre** in **Setup** to a nearby airport or city. The receiver server sends that centre to adsb.lol when the view is open. You can set `OPEN_AIR_ADSB_LOL_API_KEY` in `/etc/open-air.env` to use your own provider quota. To see what your antenna receives at 1090 MHz, select **ADS-B** in **Signals**. Open Air offsets the tuner centre by 100 kHz while the decoder stays at 1090 MHz. This moves the decoder off the tuner's centre spur. The ADS-B filter is 2 MHz at 2.4 MS/s. Positionless tracks are shown as **NO POSITION** while the decoder waits for enough valid frames to calculate coordinates. Reliable local range still depends on a 1090 MHz-capable tuner, antenna, feedline and line of sight.
 
 ## Home Assistant
 
