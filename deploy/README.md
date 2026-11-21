@@ -37,6 +37,8 @@ journalctl -u sdrangelsrv -u open-air -n 60 --no-pager
 curl -fsS http://127.0.0.1:8877/api/health
 ```
 
+The health endpoint confirms that the application process responds. Verify the browser controls as well: a missing JavaScript module can prevent the interface from starting while the health endpoint still succeeds.
+
 In **Signals**, choose an FM station and click **Listen**. In **Receiver**, confirm the frequency, resize the waterfall and sweep a short frequency range. In **Tower**, check that AM audio and the network aircraft positions update together. Start the ATC scan and confirm it holds on a transmission before moving on. In **UHF CB**, step between channels and start a scan. Choose a known channel to stop the scan. Select ADS-B in **Signals** to check your antenna's local decoder tracks, including any **NO POSITION** partial tracks. Switch away from ACARS and confirm its entries remain in **Messages**.
 
 One tuner cannot remain on airband voice and 1090 MHz at the same time. Tower therefore combines local ATC audio with independent network aircraft positions. Simultaneous local ATC and local ADS-B requires a second receiver.

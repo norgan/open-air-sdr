@@ -41,7 +41,7 @@ hostname=${origin_fields[0]}
 browser_host=${origin_fields[1]}
 
 test "$(getent group plugdev | cut -d: -f3)" = 46
-app_files=(access.mjs aircraft-network.mjs app.js cb-panel.css cb-panel.mjs cb-scan.mjs index.html local-profile.mjs local-setup.mjs message-archive.mjs message-help.mjs rf-scan.mjs server.mjs signal-meter.mjs sources.mjs state-file.mjs streams.mjs style.css tower-map.mjs)
+app_files=(access.mjs aircraft-network.mjs app.js cb-panel.css cb-panel.mjs cb-scan.mjs detail-fields.mjs index.html local-profile.mjs local-setup.mjs message-archive.mjs message-help.mjs rf-scan.mjs server.mjs signal-meter.mjs sources.mjs state-file.mjs streams.mjs style.css tower-map.mjs)
 deploy_files=(bootstrap.mjs configure-access.sh open-air-pulse.service open-air.service pulse.pa sdrangelsrv.service)
 for file in "${app_files[@]}" "${deploy_files[@]/#/deploy/}"; do
   if [[ ! -r $app/$file ]]; then
