@@ -9,14 +9,14 @@ import {explainMessage} from './message-help.mjs';
 import {appServer, Receiver} from './server.mjs';
 import {sources} from './sources.mjs';
 
-const centre={latitude:-33.95,longitude:151.18};
-const aircraft={hex:'7c6db2',flight:' TEST123 ',lat:-33.94,lon:151.20,seen_pos:1,alt_baro:2500,track:95};
+const centre={latitude:10,longitude:20};
+const aircraft={hex:'abc123',flight:' TEST123 ',lat:10.01,lon:20.02,seen_pos:1,alt_baro:2500,track:95};
 
 test('network positions are shared, scoped to the map centre and expire after a quota response',async()=>{
   let time=Date.parse('2026-11-21T08:00:00Z');
   let requests=0;
   const load=createAircraftNetwork({now:()=>time,request:async(url,options)=>{
-    assert.equal(url,'https://api.adsb.lol/v2/lat/-33.95/lon/151.18/dist/80');
+    assert.equal(url,'https://api.adsb.lol/v2/lat/10/lon/20/dist/80');
     assert.equal(options.redirect,'error');
     requests++;
     if(requests>1)return new Response(null,{status:429,headers:{'Retry-After':'120'}});
@@ -80,9 +80,9 @@ test('leaving an ACARS channel archives the unflushed capture before removing it
 test('message help expands verified codes and recognises coordinates without guessing numeric fields',()=>{
   assert.match(explainMessage({tag:'QQ',detail:'YSSYOTHH'}).summary,/Departure report/);
   assert.match(explainMessage({tag:'49',detail:'TEST YSSYOTHH'}).fields[0],/Sydney Kingsford Smith and Doha Hamad/);
-  const position=explainMessage({tag:'16',detail:'M98AQR000K-,S 33.937,E 151.173,999,999'});
+  const position=explainMessage({tag:'16',detail:'M98AQR000K-,S 21.500,E 120.750,999,999'});
   assert.match(position.summary,/position report/);
-  assert.ok(position.fields.some(line=>line.includes('33.937° S, 151.173° E')));
+  assert.ok(position.fields.some(line=>line.includes('21.500° S, 120.750° E')));
   assert.ok(position.fields.every(line=>!line.includes('999')));
   assert.match(explainMessage({tag:'H1',detail:'D14AQR000K#DFB123'}).fields.at(-1),/data acquisition/);
   assert.match(explainMessage({tag:'B6',detail:'TEST.ADS.VH-XYZ'}).summary,/ADS-C/);
@@ -122,6 +122,8 @@ test('authenticated Tower positions, scanners and message history share the rece
     assert.equal(response.status,200);
     return response.json();
   };
+  await control('/api/profile',{name:'Test locality',includeSydney:true,aircraftCentre:centre,
+    scan:{startFrequency:118_000_000,stopFrequency:118_010_000,threshold:13},presets:[]});
   const sweep=await control('/api/tower-scan',{running:true,squelch:-78});
   assert.equal(sweep.towerScan.status,'scanning');
   assert.equal(tunes[0].settings.squelch,-78);

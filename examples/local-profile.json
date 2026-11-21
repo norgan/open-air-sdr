@@ -1,0 +1,10 @@
+{
+  "name": "Local area",
+  "includeSydney": false,
+  "scan": {
+    "startFrequency": 118000000,
+    "stopFrequency": 137000000,
+    "threshold": 12
+  },
+  "presets": []
+}

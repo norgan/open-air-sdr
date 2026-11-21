@@ -22,12 +22,11 @@ async function fixture(t) {
   return { path, store: createLocalProfileStore(path) };
 }
 
-test('a new installation has independent copies of the Sydney default profile', async t => {
+test('a new installation starts without a location or regional presets', async t => {
   const { store } = await fixture(t);
   const initial = await store.read();
   assert.deepEqual(initial, {
-    name: 'Sydney, NSW', includeSydney: true,
-    aircraftCentre: { latitude: -33.95, longitude: 151.18 },
+    name: 'Local area', includeSydney: false,
     scan: { startFrequency: 118_000_000, stopFrequency: 137_000_000, threshold: 12 },
     presets: [],
   });

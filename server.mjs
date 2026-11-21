@@ -128,20 +128,39 @@ export function parseAcars(when, input, mode=0) {
 }
 
 function finite(value) { return typeof value==='number'&&Number.isFinite(value); }
-export function localAircraft(record, station, now=Date.now()) {
-  const a=record.aircraftState||{};
-  const lat=a.latitude??record.latitude, lon=a.longitude??record.longitude;
-  const hex=String(a.icao??record.name??'').toLowerCase();
-  const position=Date.parse(record.positionDateTime || a.positionDateTime || record.updated || '');
+function aircraftPosition(record, station) {
+  const a=record?.aircraftState||{};
+  const lat=a.latitude??record?.latitude, lon=a.longitude??record?.longitude;
+  const hex=String(a.icao??record?.name??'').toLowerCase();
   if(!/^[0-9a-f]{6}$/.test(hex)||!finite(lat)||!finite(lon)||Math.abs(lat)>90||Math.abs(lon)>180||
-    (lat===0&&lon===0)||!Number.isFinite(position)||now-position>60000||position-now>10000)return null;
+    (lat===0&&lon===0))return null;
   const title=String(a.callsign||a.registration||hex.toUpperCase()).trim()||hex.toUpperCase();
   const alt=a.altitude;
   const heading=finite(a.track)?a.track:finite(a.heading)?a.heading:record.heading;
   const relative=aircraftGeometry(station,lat,lon);
   return {hex,title,tag:a.onSurface?'GROUND':finite(alt)?alt.toLocaleString('en-AU')+' ft':'—',detail:[
     a.aircraftType,finite(relative.distanceKm)?relative.distanceKm.toFixed(0)+' km':null
-  ].filter(Boolean).join(' · ')||'ADS-B position',lat,lon,alt,heading,position,seen:Math.max(0,(now-position)/1000),...relative};
+  ].filter(Boolean).join(' · ')||'ADS-B position',lat,lon,alt,heading,...relative};
+}
+export function localAircraft(record, station, now=Date.now()) {
+  const time=Date.parse(record?.positionDateTime || record?.aircraftState?.positionDateTime || record?.updated || '');
+  if(!Number.isFinite(time)||now-time>60000||time-now>10000)return null;
+  const position=aircraftPosition(record,station);
+  return position&&{...position,position:time,seen:Math.max(0,(now-time)/1000)};
+}
+export function localAircraftPositions(mapItems, report, station, now=Date.now()) {
+  const current=new Map();
+  for(const record of Array.isArray(mapItems)?mapItems:[]){
+    const position=localAircraft(record,station,now);
+    if(position&&(!current.has(position.hex)||position.position>current.get(position.hex).position))current.set(position.hex,position);
+  }
+  // SDRangel's direct tracker report can carry positions before a map pipe delivers them.
+  // Its positions have no individual timestamps, so keep those fields empty in the export.
+  for(const aircraftState of Array.isArray(report)?report:[]){
+    const position=aircraftPosition({aircraftState},station);
+    if(position&&!current.has(position.hex))current.set(position.hex,position);
+  }
+  return [...current.values()].sort((a,b)=>(a.distanceKm??Infinity)-(b.distanceKm??Infinity));
 }
 export function aircraftFeed(state) {
   return {now:Date.now()/1000,aircraft:state.aircraft.map(a=>({
@@ -302,6 +321,7 @@ export class Receiver {
       const base={connected:true,running,frequency:centre,centre,mode:null,bandwidth:null,updated:new Date().toISOString(),aircraft:[],messages:[],activity:[]};
       const preferred = this.selectedSource;
       const candidates = [preferred,...[...availableSources,...(this.localPresets??[])].filter(p=>p.id!==preferred?.id)]
+        .map(p=>p?.decoder==='ADSBDemod' && p.centre+p.offset===centre ? {...p,centre,offset:0} : p)
         .filter(p=>p?.centre===centre);
       let source=null, channel=null, selectedSettings=null;
       findSource: for(const p of candidates){
@@ -344,8 +364,8 @@ export class Receiver {
       base.channelPower=stats.channelPowerDB;
       base.squelch=stats.squelch==null?null:Boolean(stats.squelch);
       base.spectrum=spectrum?.centerFrequency===centre?spectrum:null;
-      base.aircraft=(map?.items||[]).map(item=>localAircraft(item,station)).filter(Boolean).sort((a,b)=>(a.distanceKm??Infinity)-(b.distanceKm??Infinity));
       if(source?.kind==='aircraft'){
+        base.aircraft=localAircraftPositions(map?.items,stats.aircraftState,station);
         base.adsb={channelSampleRate:stats.channelSampleRate,correlationThreshold:selectedSettings?.correlationThreshold,
           trackedAircraft:Array.isArray(stats.aircraftState)?stats.aircraftState.length:null};
       }

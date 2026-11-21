@@ -5,9 +5,8 @@ import { customSource } from './sources.mjs';
 import { writeStateFile } from './state-file.mjs';
 
 const defaultProfile = {
-  name: 'Sydney, NSW',
-  includeSydney: true,
-  aircraftCentre: { latitude: -33.95, longitude: 151.18 },
+  name: 'Local area',
+  includeSydney: false,
   scan: { startFrequency: 118_000_000, stopFrequency: 137_000_000, threshold: 12 },
   presets: [],
 };

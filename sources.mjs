@@ -1,5 +1,5 @@
 export const sources = [
-  {id:'adsb', name:'ADS-B aircraft', label:'1090.000', group:'Aviation data', kind:'aircraft', description:'Aircraft positions received directly from your antenna.', centre:1090000000, offset:0, gain:184, decoder:'ADSBDemod', settings:{correlationThreshold:5}},
+  {id:'adsb', name:'ADS-B aircraft', label:'1090.000', group:'Aviation data', kind:'aircraft', description:'Aircraft positions received directly from your antenna.', centre:1090100000, offset:-100000, gain:184, decoder:'ADSBDemod', settings:{rfBandwidth:2000000,correlationThreshold:5}},
   {id:'acars', name:'ACARS messages', label:'131.550', group:'Aviation data', kind:'message', description:'Text and data sent between aircraft and ground stations.', centre:131650000, offset:-96000, gain:184, decoder:'ACARSDemod', settings:{mode:0,rfBandwidth:12500,hideNoInfo:0,displayChart:1}},
   {id:'vdl2', name:'VDL Mode 2', label:'136.975', group:'Aviation data', kind:'message', description:'Digital aircraft and ground-station traffic.', centre:136875000, offset:100000, gain:184, decoder:'ACARSDemod', settings:{mode:1,rfBandwidth:25000,hideNoInfo:0,displayChart:1}},
   {id:'director', name:'Sydney Director West', label:'126.100', group:'Sydney airband', kind:'voice', description:'Controllers sequencing aircraft for arrival into Sydney.', centre:126000000, offset:100000, gain:184, decoder:'AMDemod', settings:{rfBandwidth:10000,squelch:-64,volume:1}},
@@ -37,7 +37,7 @@ const tuningModes = {
   },
   acars: { label: 'ACARS', kind: sources[1].kind, decoder: sources[1].decoder, gain: sources[1].gain, settings: sources[1].settings },
   vdl2: { label: 'VDL Mode 2', kind: sources[2].kind, decoder: sources[2].decoder, gain: sources[2].gain, settings: sources[2].settings },
-  adsb: { label: 'ADS-B', kind: sources[0].kind, decoder: sources[0].decoder, gain: sources[0].gain, settings: sources[0].settings, offset: 0 },
+  adsb: { label: 'ADS-B', kind: sources[0].kind, decoder: sources[0].decoder, gain: sources[0].gain, settings: sources[0].settings, offset: sources[0].offset },
 };
 
 export const receiverModes = Object.entries(tuningModes).map(([id, { label, decoder, bandwidth, squelch }]) => ({

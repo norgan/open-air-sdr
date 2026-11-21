@@ -431,6 +431,7 @@ function sourceButton(source, index) {
 
 for (const [index, source] of sources.entries()) {
   const button = sourceButton(source, index);
+  button.hidden=!presetVisible(source.id);
   $('quick-sources').append(button);
   buttons.push(button);
 }
@@ -448,7 +449,7 @@ function updateSelectedPresets() {
 }
 
 function presetVisible(id) {
-  return localArea?.includeSydney!==false || !sydneyIds.has(id);
+  return localArea?.includeSydney===true || !sydneyIds.has(id);
 }
 
 function browserPresets() {

@@ -1,23 +1,38 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { Mcp, Receiver, aircraftFeed, audioUpdate, localAircraft, parseAcars, appServer, desktopSpectrumPort } from './server.mjs';
+import { Mcp, Receiver, aircraftFeed, audioUpdate, localAircraft, localAircraftPositions, parseAcars, appServer, desktopSpectrumPort } from './server.mjs';
 import { catalogue, customSource, formatMHz, sources } from './sources.mjs';
 import { spectrumRow } from './streams.mjs';
 import { configureReceiver } from './deploy/bootstrap.mjs';
 
-const point = {name:'7c6db2',latitude:-34.0758,longitude:151.0704,aircraftState:{altitude:6900,callsign:'QFA738'}};
+const point = {name:'abc123',latitude:10.275,longitude:20.1,aircraftState:{altitude:6900,callsign:'TEST123'}};
 const instant=Date.parse('2026-11-21T03:00:00Z');
 
 test('aircraft feed uses only current positions and keeps local range',()=>{
-  const station={latitude:-33.90,longitude:151.35};
+  const station={latitude:10,longitude:20};
   assert.equal(localAircraft({...point,positionDateTime:'2026-11-21T02:58:00Z'},station,instant),null);
   const local=localAircraft({...point,positionDateTime:'2026-11-21T02:59:45Z'},station,instant);
-  assert.equal(local.title,'QFA738');
+  assert.equal(local.title,'TEST123');
   assert.ok(local.distanceKm>30&&local.distanceKm<35);
   const feed=aircraftFeed({aircraft:[local]});
   assert.equal(feed.aircraft[0].alt_baro,6900);
   assert.equal(feed.aircraft[0].seen_pos,15);
+});
+
+test('local ADS-B uses direct decoder positions when map items are unavailable',()=>{
+  const station={latitude:10,longitude:20};
+  const tracker=[{icao:'abc123',latitude:10.27,longitude:20.1,callsign:'TRACKER1',altitude:6800},
+    {icao:'abc124',callsign:'NO-POSITION',latitude:0,longitude:0}];
+  const [direct]=localAircraftPositions(undefined,tracker,station,instant);
+  assert.equal(direct.title,'TRACKER1');
+  assert.ok(Number.isFinite(direct.distanceKm));
+  assert.equal(aircraftFeed({aircraft:[direct]}).aircraft[0].seen_pos,undefined);
+  const fresh={...point,positionDateTime:'2026-11-21T02:59:45Z'};
+  const positions=localAircraftPositions([fresh],tracker,station,instant);
+  assert.equal(positions.length,1);
+  assert.equal(positions[0].title,'TEST123');
+  assert.equal(positions[0].seen,15);
 });
 
 test('SDRangel hex capture strips parity and extracts ACARS heading and text',()=>{
@@ -55,8 +70,8 @@ test('MCP client negotiates a session and decodes its HTTP event stream',async()
 
 test('source switch configures the live receiver and confirms the ADS-B setting',async()=>{
   const changes=[];
-  const radio={centerFrequency:131650000,devSampleRate:2400000,log2Decim:0,agc:0,gain:184};
-  const settings={inputFrequencyOffset:0,correlationThreshold:7};
+  const radio={centerFrequency:1090000000,devSampleRate:2400000,log2Decim:0,agc:0,gain:184};
+  const settings={inputFrequencyOffset:0,correlationThreshold:7,rfBandwidth:2600000};
   const voice={inputFrequencyOffset:0,audioMute:1};
   const fake={async call(name, args){
     changes.push([name,args]);
@@ -70,16 +85,21 @@ test('source switch configures the live receiver and confirms the ADS-B setting'
       case 'set_channel_settings': Object.assign(args.channelIndex===1?settings:voice,args.settings); return {};
       case 'get_channel_report': return {ADSBDemodReport:{channelPowerDB:-43}};
       case 'get_map_items': return {items:[{...point,positionDateTime:new Date().toISOString()}]};
-      case 'get_location': return {latitude:-33.79,longitude:150.99};
+      case 'get_location': return {latitude:10,longitude:20};
       case 'get_spectrum_data': return {centerFrequency:radio.centerFrequency,power:[-80,-70]};
       default: throw Error('Unexpected radio operation '+name);
     }
   }};
   const receiver=new Receiver(fake);
+  assert.equal((await receiver.snapshot()).source,'adsb');
   const current=await receiver.tune('adsb');
   assert.equal(current.source,'adsb');
   assert.equal(current.mode,'adsb');
   assert.equal(current.frequency,1090000000);
+  assert.equal(current.centre,1090100000);
+  assert.equal(settings.inputFrequencyOffset,-100000);
+  assert.equal(settings.rfBandwidth,2000000);
+  assert.ok(settings.rfBandwidth < radio.devSampleRate);
   assert.equal(current.aircraft.length,1);
   assert.equal(settings.correlationThreshold,5);
   assert.equal(sources.find(p=>p.id==='acars').centre+sources.find(p=>p.id==='acars').offset,131554000);

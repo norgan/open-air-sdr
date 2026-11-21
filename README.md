@@ -10,11 +10,11 @@ In **Receiver**, drag the lower edge of the waterfall or focus the handle and us
 
 ## Install the receiver server
 
-Use an unprivileged Debian 13 LXC container with an RTL-SDR USB dongle and an antenna. On Proxmox, identify the dongle with `lsusb`. Pass through its USB node with group `46` and mode `0660`. Run these commands on the Proxmox host with your container ID and the bus and device numbers from `lsusb`.
+Use an unprivileged Debian 13 LXC container with an RTL-SDR USB dongle and an antenna. On Proxmox, identify the dongle with `lsusb`. Pass through its USB node with group `46` and mode `0660`. Set the container ID and USB path for your own deployment on the Proxmox host.
 
 ```bash
-CTID=200
-USB_NODE=/dev/bus/usb/001/004
+read -r -p 'Container ID: ' CTID
+read -r -p 'USB device path from lsusb: ' USB_NODE
 pct set "$CTID" --dev0 "path=$USB_NODE,gid=46,mode=0660"
 ```
 
@@ -44,14 +44,16 @@ journalctl -u open-air -u sdrangelsrv -n 60 --no-pager
 
 ## Set up your area and rescan
 
-1. Open **Setup**, enter your **Area name**, and untick **Include Sydney example presets** to hide the Sydney examples.
+1. Open **Setup** and enter your **Area name**. Regional presets are off by default. Enable **Include Sydney example presets** only if that catalogue suits your receiver.
 2. Set **From (MHz)** and **To (MHz)** to a short section of a band your antenna and tuner cover. Start with **Above noise (dB)** at 12. Choose **Save setup** to keep the area and scan settings on the server.
 3. Click **Rescan** and watch **Detected peaks**. Choose **Use peak** to fill the preset editor. Select a mode and choose **Tune** to inspect the signal.
 4. Add confirmed frequencies under **Local presets** with a name and mode. They appear in **Signals** and become available to Home Assistant. Edit or remove them in **Setup** as your local reception changes.
 
 If a short scan misses a known station, check its signal on the waterfall, then try a lower threshold or move the antenna and rescan. Repeat with another band to build out the catalogue. One physical tuner is shared across clients. A scan retunes that receiver, and manual tuning stops the active scan.
 
-For Tower outside Sydney, set **Tower map centre** in **Setup** to a nearby airport or city. The receiver server sends that centre to adsb.lol when the view is open. You can set `OPEN_AIR_ADSB_LOL_API_KEY` in `/etc/open-air.env` to use your own provider quota. To see what your antenna receives at 1090 MHz, select **ADS-B** in **Signals**.
+For file-based provisioning, copy [the area profile example](examples/local-profile.json), edit it for your own region, and point `OPEN_AIR_PROFILE_FILE` to the copy in the receiver environment. Keep deployed profiles and access credentials local to the installation.
+
+Set **Tower map centre** in **Setup** to a nearby airport or city. The receiver server sends that centre to adsb.lol when the view is open. You can set `OPEN_AIR_ADSB_LOL_API_KEY` in `/etc/open-air.env` to use your own provider quota. To see what your antenna receives at 1090 MHz, select **ADS-B** in **Signals**. Open Air offsets the tuner centre by 100 kHz while the decoder stays at 1090 MHz. This moves the decoder off the tuner’s centre spur. The ADS-B filter is 2 MHz at 2.4 MS/s, and aircraft positions come from SDRangel’s map and decoder reports.
 
 ## Home Assistant
 
