@@ -1,9 +1,7 @@
 {
   "domain": "open_air",
   "name": "Open Air",
-  "codeowners": ["@norgan"],
   "config_flow": true,
-  "documentation": "https://github.com/norgan/open-air-sdr#home-assistant",
   "integration_type": "device",
   "iot_class": "local_polling",
   "requirements": [],
