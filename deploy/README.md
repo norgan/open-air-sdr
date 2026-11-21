@@ -26,6 +26,10 @@ To update an installed instance or move it to a different browser hostname, extr
 
 Bootstrap gives SDRangel 8.1 time to complete its asynchronous RTL-SDR device selection before reading it back.
 
+Set both `OPEN_AIR_STATION_LATITUDE` and `OPEN_AIR_STATION_LONGITUDE` in `/etc/open-air.env` for local ADS-B position validation. Bootstrap applies that reference through SDRangel's local location API before channel construction. `node deploy/configure-station.mjs --from-profile` preserves an existing receiver reference near the saved area, or uses the saved map centre as an approximate reference, and saves the selected coordinates for subsequent starts.
+
+The build patches SDRangel 8.1.0's headless ADS-B tracker to initialise its station location and follow later position preference changes. Existing installations can run `bash deploy/repair-adsb-headless.sh` to patch the cached source and rebuild only `demodadsbsrv`. The script validates the release and CMake cache, builds before stopping the receiver, retains the previous plugin, and restores it if activation fails. Identity/altitude reception without coordinates can result from this defect even when RF decoding works.
+
 The installer retries its proxied health check while nginx reloads. Open Air configures local PCM forwarding when browser playback starts. This applies the audio settings after the selected decoder has opened SDRangel's audio output.
 
 ## Verify

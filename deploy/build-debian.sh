@@ -41,6 +41,9 @@ cmake --install "$build_root/libacars-build"
 if [[ ! -d $build_root/sdrangel/.git ]]; then
   run_build git clone --branch v8.1.0 --depth 1 https://github.com/f4exb/sdrangel.git "$build_root/sdrangel"
 fi
+patch_script=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/patch-adsb-headless.mjs
+install -m 0644 -o openair -g "$(id -gn openair)" "$patch_script" "$build_root/patch-adsb-headless.mjs"
+run_build node "$build_root/patch-adsb-headless.mjs" "$build_root/sdrangel"
 flags=()
 while IFS= read -r option; do
   case "$option" in
@@ -68,3 +71,4 @@ for plugin in featuremcpserversrv demodacarssrv demodadsbsrv inputrtlsdrsrv; do
   fi
 done
 node --version
+

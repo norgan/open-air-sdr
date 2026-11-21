@@ -4,6 +4,16 @@ import { setTimeout as wait } from 'node:timers/promises';
 
 export async function configureReceiver({request=fetch, delay=wait, env=process.env}={}) {
   const root = 'http://127.0.0.1:8091/sdrangel';
+  const stationKeys = ['OPEN_AIR_STATION_LATITUDE','OPEN_AIR_STATION_LONGITUDE'];
+  const hasStation = stationKeys.some(key=>env[key]!==undefined);
+  const station = hasStation ? {
+    latitude:Number(env.OPEN_AIR_STATION_LATITUDE),longitude:Number(env.OPEN_AIR_STATION_LONGITUDE)
+  } : null;
+  if (hasStation && (stationKeys.some(key=>typeof env[key]!=='string'||!env[key].trim()) ||
+      !Number.isFinite(station.latitude)||Math.abs(station.latitude)>90 ||
+      !Number.isFinite(station.longitude)||Math.abs(station.longitude)>180)) {
+    throw Error('Set both valid OPEN_AIR_STATION_LATITUDE and OPEN_AIR_STATION_LONGITUDE values.');
+  }
   const spectrumPort = Number(env.OPEN_AIR_SPECTRUM_PORT || 8887);
   const mcpPort = Number(env.SDRANGEL_MCP_PORT || 8092);
   for (const port of [spectrumPort,mcpPort]) {
@@ -29,6 +39,14 @@ export async function configureReceiver({request=fetch, delay=wait, env=process.
     throw Error(description+(recentError ? '. '+recentError : ''));
   };
   await until(()=>api(''),'SDRangel REST service did not start');
+  if (station) {
+    await api('/location','PUT',station);
+    await until(async()=>{
+      const position=await api('/location');
+      return Math.abs(position.latitude-station.latitude)<0.0001 &&
+        Math.abs(position.longitude-station.longitude)<0.0001;
+    },'SDRangel did not confirm the configured station reference');
+  }
   const {devices} = await api('/devices?direction=0');
   const radios = (devices || []).filter(device=>device.hwType==='RTLSDR' &&
     (!env.OSDR_SERIAL || device.serial===env.OSDR_SERIAL));
@@ -88,3 +106,4 @@ if(process.argv[1] && pathToFileURL(resolve(process.argv[1])).href===import.meta
   try { await configureReceiver(); }
   catch(error) { console.error(error.message); process.exitCode=1; }
 }
+

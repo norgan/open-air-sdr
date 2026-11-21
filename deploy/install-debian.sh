@@ -42,7 +42,7 @@ browser_host=${origin_fields[1]}
 
 test "$(getent group plugdev | cut -d: -f3)" = 46
 app_files=(access.mjs aircraft-network.mjs app.js cb-panel.css cb-panel.mjs cb-scan.mjs detail-fields.mjs index.html local-profile.mjs local-setup.mjs message-archive.mjs message-help.mjs rf-scan.mjs server.mjs signal-meter.mjs sources.mjs state-file.mjs streams.mjs style.css tower-map.mjs)
-deploy_files=(bootstrap.mjs configure-access.sh disable-web-auth.mjs open-air-pulse.service open-air.service pulse.pa sdrangelsrv.service)
+deploy_files=(bootstrap.mjs configure-access.sh configure-station.mjs disable-web-auth.mjs patch-adsb-headless.mjs repair-adsb-headless.sh open-air-pulse.service open-air.service pulse.pa sdrangelsrv.service)
 for file in "${app_files[@]}" "${deploy_files[@]/#/deploy/}"; do
   if [[ ! -r $app/$file ]]; then
     printf 'The Open Air package is missing %s.\n' "$file" >&2
@@ -109,7 +109,7 @@ if [[ $app != /opt/open-air ]]; then
   for file in "${app_files[@]}"; do
     install -m 0644 "$app/$file" "/opt/open-air/$file"
   done
-  install -m 0644 "$app/deploy/"{bootstrap.mjs,configure-access.sh,disable-web-auth.mjs,pulse.pa} /opt/open-air/deploy/
+  install -m 0644 "$app/deploy/"{bootstrap.mjs,configure-access.sh,configure-station.mjs,disable-web-auth.mjs,patch-adsb-headless.mjs,repair-adsb-headless.sh,pulse.pa} /opt/open-air/deploy/
 fi
 mv -f -- "$env_stage" "$env_file"
 restore_nginx=false

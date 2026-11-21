@@ -58,6 +58,10 @@ For file-based provisioning, copy [the area profile example](examples/local-prof
 
 Set **Tower map centre** in **Setup** to a nearby airport or city. The receiver server sends that centre to adsb.lol when the view is open. You can set `OPEN_AIR_ADSB_LOL_API_KEY` in `/etc/open-air.env` to use your own provider quota. To see what your antenna receives at 1090 MHz, select **ADS-B** in **Signals**. Open Air offsets the tuner centre by 100 kHz while the decoder stays at 1090 MHz. This moves the decoder off the tuner's centre spur. The ADS-B filter is 2 MHz at 2.4 MS/s. Positionless tracks are shown as **NO POSITION** while the decoder waits for enough valid frames to calculate coordinates. Reliable local range still depends on a 1090 MHz-capable tuner, antenna, feedline and line of sight.
 
+Local ADS-B position validation also needs a valid station reference. Set `OPEN_AIR_STATION_LATITUDE` and `OPEN_AIR_STATION_LONGITUDE` in the receiver environment to your antenna coordinates. Bootstrap applies and confirms them before receiver channels are constructed. As an approximate reference, `node deploy/configure-station.mjs --from-profile` can use the saved map centre; distances are then relative to that reference rather than the exact antenna.
+
+SDRangel 8.1.0 has a headless tracker defect: its desktop GUI initialises the station position, but the server tracker omits that step. The Open Air build applies a generic source patch that initialises the tracker and follows station-position updates. For an existing installation with the cached v8.1.0 source and build trees, run `bash deploy/repair-adsb-headless.sh` after configuring the station. It rebuilds only the ADS-B server plugin and keeps a rollback copy. [Upstream tracker source](https://github.com/f4exb/sdrangel/blob/v8.1.0/plugins/channelrx/demodadsb/adsbdemodtracker.cpp)
+
 ## Home Assistant
 
 1. Copy `home-assistant/custom_components/open_air` from this repository into the Home Assistant configuration directory as `/config/custom_components/open_air`.
