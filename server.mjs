@@ -754,8 +754,6 @@ export function appServer(receiver, port=8877, options={}){
         const command=path.slice('/api/ha/'.length);
         if(req.method!=='POST'||!haCommands.has(command))return send(res,404,{error:'Unknown Home Assistant command.'});
         path='/api/'+command;
-      }else if(publicOrigin?.protocol==='https:'&&!access.webEnabled){
-        return send(res,503,{error:'Configure browser sign-in on the Open Air receiver to use this HTTPS address.'});
       }else if(!access.checkWeb(req.headersDistinct??req.headers)){
         res.setHeader('WWW-Authenticate','Basic realm="Open Air", charset="UTF-8"');
         return send(res,401,{error:'Sign in to Open Air.'});
@@ -985,3 +983,4 @@ if(process.argv[1]&&pathToFileURL(resolve(process.argv[1])).href===import.meta.u
     receiver.releaseCapture().catch(()=>{}).finally(()=>process.exit());
   });
 }
+

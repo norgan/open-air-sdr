@@ -448,6 +448,64 @@ test('local browser serves the UI and bars cross-origin tuning',async(t)=>{
   assert.equal((await fetch(root+'/api/close',{method:'POST',headers:{Origin:root}})).status,403);
 });
 
+test('an HTTPS origin does not invent browser authentication and still rejects cross-origin tuning',async(t)=>{
+  const port=18878;
+  let tuned=0;
+  const service=appServer({
+    async snapshot(){return {source:'adsb',connected:true,running:true,aircraft:[]};},
+    async tune(){tuned++;return {source:'adsb',connected:true,running:true,aircraft:[]};}
+  },port,{origin:'https://open-air.home.arpa'});
+  await new Promise((ok,fail)=>{service.once('error',fail);service.listen(port,'127.0.0.1',ok);});
+  t.after(()=>{service.closeAllConnections();service.close();});
+  const root='http://127.0.0.1:'+port;
+  const host={Host:'open-air.home.arpa'};
+
+  for(const path of ['/','/app.js','/api/state']){
+    const response=await fetch(root+path,{headers:host});
+    assert.equal(response.status,200,`${path} should be available without arbitrary browser credentials`);
+  }
+
+  const response=await fetch(root+'/api/tune',{
+    method:'POST',
+    headers:{...host,'Content-Type':'application/json',Origin:'https://another.test'},
+    body:'{"source":"adsb"}'
+  });
+  assert.equal(response.status,403);
+  assert.equal(tuned,0);
+});
+
+test('explicit browser credentials remain opt-in and do not weaken origin checks',async(t)=>{
+  const port=18879;
+  let tuned=0;
+  const service=appServer({
+    async snapshot(){return {source:'adsb',connected:true,running:true,aircraft:[]};},
+    async tune(){tuned++;return {source:'adsb',connected:true,running:true,aircraft:[]};}
+  },port,{
+    origin:'https://open-air.home.arpa',
+    access:{username:'radio',password:'secret'}
+  });
+  await new Promise((ok,fail)=>{service.once('error',fail);service.listen(port,'127.0.0.1',ok);});
+  t.after(()=>{service.closeAllConnections();service.close();});
+  const root='http://127.0.0.1:'+port;
+  const host={Host:'open-air.home.arpa'};
+
+  for(const path of ['/','/app.js','/api/state']){
+    const response=await fetch(root+path,{headers:host});
+    assert.equal(response.status,401,`${path} should require explicitly configured browser credentials`);
+    assert.match(response.headers.get('www-authenticate')||'',/^Basic /);
+  }
+
+  const authorization='Basic '+Buffer.from('radio:secret').toString('base64');
+  assert.equal((await fetch(root+'/api/state',{headers:{...host,Authorization:authorization}})).status,200);
+  const response=await fetch(root+'/api/tune',{
+    method:'POST',
+    headers:{...host,Authorization:authorization,'Content-Type':'application/json',Origin:'https://another.test'},
+    body:'{"source":"adsb"}'
+  });
+  assert.equal(response.status,403);
+  assert.equal(tuned,0);
+});
+
 const knownLog=process.env.OPEN_AIR_TEST_CAPTURE;
 if(knownLog)test('reads an actual SDRangel ACARS capture without printing its messages',async()=>{
   const rows=(await readFile(knownLog,'utf8')).trim().split(/\r?\n/).slice(1);
@@ -457,3 +515,4 @@ if(knownLog)test('reads an actual SDRangel ACARS capture without printing its me
   });
   assert.ok(messages.some(msg=>msg?.title&&msg?.tag));
 });
+

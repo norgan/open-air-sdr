@@ -26,18 +26,19 @@ Copy or clone this repository into the container. Run these commands as root fro
 
 ```bash
 bash deploy/install-debian.sh https://open-air.example.com
-bash deploy/configure-access.sh
 ```
 
-The first install builds SDRangel and libacars and enables Open Air at boot. The access script configures a browser username and password and issues a separate Home Assistant token. Save the token somewhere private. The settings live in `/etc/open-air.env`.
+The first install builds SDRangel and libacars and enables Open Air at boot. Browser sign-in is optional, including over HTTPS. To opt in, run `bash deploy/configure-access.sh`; it configures browser credentials and issues a separate Home Assistant token. Settings live in `/etc/open-air.env`.
+
+To remove browser sign-in from an existing installation, run `node deploy/disable-web-auth.mjs` as root, then `systemctl restart open-air.service`. The command backs up the affected files, removes the saved browser credentials and migrates the older mandatory HTTPS sign-in check. An existing Home Assistant token is preserved.
 
 ## Publish through your reverse proxy
 
 In the container's `/etc/nginx/conf.d/open-air.conf`, add an `allow` line for the private address or CIDR of your reverse proxy above `deny all`. Apply the change with `nginx -t && systemctl reload nginx`.
 
-Create an HTTPS proxy host in Nginx Proxy Manager pointing to the container's private hostname on port `80` over HTTP. Preserve the browser's `Host` header and pass through `Authorization` and `X-Open-Air-Token`. Disable response buffering for the Open Air proxy host so the live waterfall and audio stream promptly. Keep the proxy-to-container hop private. Open Air supplies the Basic login, so leave Nginx Proxy Manager Basic authentication disabled for this proxy host. [Nginx Proxy Manager guide](https://nginxproxymanager.com/guide/)
+Create an HTTPS proxy host in Nginx Proxy Manager pointing to the container's private hostname on port `80` over HTTP. Preserve the browser's `Host` header and pass through `Authorization` and `X-Open-Air-Token` when those optional access methods are configured. Disable response buffering for the Open Air proxy host so the live waterfall and audio stream promptly. Keep the proxy-to-container hop private. A proxy login is also optional. [Nginx Proxy Manager guide](https://nginxproxymanager.com/guide/)
 
-Open your HTTPS hostname and sign in. In **Receiver**, tune a known local FM station, enable the speaker, and check that the waterfall updates. For service diagnostics, run the following inside the container.
+Open your HTTPS hostname. In **Receiver**, tune a known local FM station, enable the speaker, and check that the waterfall updates. For service diagnostics, run the following inside the container.
 
 ```bash
 systemctl status open-air sdrangelsrv open-air-pulse --no-pager
@@ -77,3 +78,4 @@ Get the new release, then rerun `bash deploy/install-debian.sh https://open-air.
 ## Licence
 
 Open Air is released under the [MIT licence](LICENSE). SDRangel and libacars are separately installed dependencies with their own licences.
+

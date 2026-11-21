@@ -14,12 +14,11 @@ Copy this source directory into the container, preserving `deploy`. Pass the exa
 
 ```bash
 bash deploy/install-debian.sh https://open-air.example.com
-bash deploy/configure-access.sh
 ```
 
 The first run builds SDRangel 8.1.0 and libacars 2.2.1 on Debian. It then configures systemd, a virtual audio sink and the container’s Open Air virtual host. Build output is under `/var/lib/open-air/src`. The installer derives nginx’s `server_name` from the browser origin. SDRangel control, FFT streaming and PCM input bind to loopback.
 
-An HTTPS origin requires Open Air browser credentials. The access script prompts for them and provides a distinct Home Assistant API token. The health endpoint is available while credentials are being configured.
+Browser credentials are optional for HTTP and HTTPS. Run `bash deploy/configure-access.sh` only when opting into browser sign-in; it also provides a distinct Home Assistant API token. To remove browser sign-in from an existing installation, run `node deploy/disable-web-auth.mjs` as root and restart `open-air.service`. It preserves an existing Home Assistant token and creates backups of changed files.
 
 Add your proxy’s private IP as an `allow` entry before `deny all` in `/etc/nginx/conf.d/open-air.conf`. Apply it with `nginx -t && systemctl reload nginx`. In Nginx Proxy Manager, forward the published hostname to the container over HTTP port 80. Preserve the original Host and authorization headers and disable response buffering. For a DNS-based upstream, use a LAN record such as `open-air.home.arpa` and verify it resolves from NPM. [Nginx Proxy Manager guide](https://nginxproxymanager.com/guide/)
 
@@ -44,3 +43,4 @@ In **Signals**, choose an FM station and click **Listen**. In **Receiver**, conf
 One tuner cannot remain on airband voice and 1090 MHz at the same time. Tower therefore combines local ATC audio with independent network aircraft positions. Simultaneous local ATC and local ADS-B requires a second receiver.
 
 The server writes your area profile and decoded message history under the `openair` user’s `open-air-data` directory. Set `OPEN_AIR_ADSB_LOL_API_KEY` in `/etc/open-air.env` if you have an adsb.lol key, then restart `open-air.service`. The server only polls for network aircraft while a Tower view is open. [adsb.lol API limits](https://www.adsb.lol/docs/open-data/api)
+
