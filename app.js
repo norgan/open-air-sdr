@@ -12,6 +12,7 @@ import { aircraftIdentity, rememberAircraftIdentity, resolveAircraftIdentity, se
 
 const $ = id => document.getElementById(id);
 const selectionRecords=new WeakMap();
+const aircraftRecords=new WeakMap();
 const icons = {
   aircraft: '<path d="M12 3v18m0-10 7 5m-7-5-7 5m7 2 3 2m-3-2-3 2"/>',
   message: '<path d="M5 5h14v12H9l-4 3V5Zm4 4h6m-6 4h8"/>',
@@ -1284,31 +1285,54 @@ function formattedTime(value) {
   const d = new Date(value);
   return Number.isFinite(d.getTime()) ? d.toLocaleTimeString('en-AU', {hour12:false, timeZoneName:'short'}) : '';
 }
-function aircraftRecord(item,row,openRecords,openCards) {
-  const key=aircraftRecordKey(item);
+function updateAircraftSummary(summary,item) {
+  summary.querySelector('.item-icon').innerHTML=icon('aircraft');
+  summary.querySelector('strong').textContent=item.title || 'Received signal';
+  summary.querySelector('small').textContent=item.tag || '';
+  summary.querySelector('.item-detail').textContent=item.detail || '';
+}
+
+function updateAircraftRecord(record,item) {
+  const recordState=aircraftRecords.get(record);
+  if (!recordState) return;
+  recordState.item=item;
+  selectionRecords.set(record,item);
+  rememberAircraftIdentity(item);
+  updateAircraftSummary(recordState.summary,item);
+  const card=recordState.body.querySelector('.aircraft-card');
+  if (record.open && card) updateAircraftCard(card,item,{lookup:mode==='live'});
+  else if (record.open) recordState.mountCard();
+  paintAircraftSelectionRecord(record);
+}
+
+function aircraftRecord(item,key=aircraftRecordKey(item)) {
   const record=document.createElement('details');
   const summary=document.createElement('summary');
   const body=document.createElement('div');
   record.className='aircraft-record';
   record.dataset.aircraft=key;
-  record.open=openRecords.has(key);
   summary.className='activity-item';
+  const row=$('thing').content.cloneNode(true);
   const compact=row.querySelector('.activity-item');
   summary.append(...compact.childNodes);
-  wireAircraftSelection(record,summary,item,'list');
   body.className='aircraft-record-content';
   const mountCard=() => {
-    let card=body.querySelector('.aircraft-card') || openCards.get(key);
-    if (card) updateAircraftCard(card,item,{lookup:mode==='live'});
-    else card=createAircraftCard(item,{lookup:mode==='live'});
+    const current=aircraftRecords.get(record)?.item;
+    if (!current) return;
+    let card=body.querySelector('.aircraft-card');
+    if (card) updateAircraftCard(card,current,{lookup:mode==='live'});
+    else card=createAircraftCard(current,{lookup:mode==='live'});
     if (card.parentNode!==body) body.append(card);
   };
   const syncRecord=() => {
     summary.title=record.open ? 'Close aircraft details' : 'Open aircraft details';
     if (record.open) mountCard();
   };
-  record.addEventListener('toggle',syncRecord);
   record.append(summary,body);
+  aircraftRecords.set(record,{item,summary,body,mountCard});
+  wireAircraftSelection(record,summary,item,'list');
+  record.addEventListener('toggle',syncRecord);
+  updateAircraftRecord(record,item);
   syncRecord();
   return record;
 }
@@ -1368,14 +1392,50 @@ function messageRecord(item,row,openRecords,openHelp) {
   record.append(summary,body);
   return record;
 }
+function reconcileAircraftRows(items,emptyText,list) {
+  const records=new Map();
+  for (const child of list.children) {
+    if (!child.classList.contains('aircraft-record')) continue;
+    const matches=records.get(child.dataset.aircraft) || [];
+    matches.push(child);
+    records.set(child.dataset.aircraft,matches);
+  }
+  const desired=[];
+  for (const item of items) {
+    const key=aircraftRecordKey(item);
+    const matches=records.get(key);
+    const record=matches?.shift() || aircraftRecord(item,key);
+    updateAircraftRecord(record,item);
+    desired.push(record);
+  }
+  if (!desired.length) {
+    const existing=Array.from(list.children).find(node=>node.classList.contains('empty'));
+    const empty=existing || document.createElement('div');
+    empty.className='empty';
+    empty.textContent=emptyText ?? 'No positions from your antenna yet.';
+    desired.push(empty);
+  }
+  let cursor=list.firstChild;
+  for (const node of desired) {
+    if (node===cursor) cursor=cursor.nextSibling;
+    else list.insertBefore(node,cursor);
+  }
+  while (cursor) {
+    const next=cursor.nextSibling;
+    cursor.remove();
+    cursor=next;
+  }
+}
+
 function rows(items, kind, emptyText, list = $('activity'), limit = 24) {
+  if (kind==='aircraft') {
+    reconcileAircraftRows(items,emptyText,list);
+    paintAircraftSelection();
+    return;
+  }
   const content=document.createDocumentFragment();
   const openHelp=new Set(Array.from(list.querySelectorAll('.message-help[open]'),node=>node.dataset.message));
   const openMessages=new Set(Array.from(list.querySelectorAll('.message-record[open]'),node=>node.dataset.message));
-  const openAircraftRecords=Array.from(list.querySelectorAll('.aircraft-record[open]'));
-  const openAircraft=new Set(openAircraftRecords.map(node=>node.dataset.aircraft));
-  const openAircraftCards=new Map(openAircraftRecords.map(node=>[node.dataset.aircraft,node.querySelector('.aircraft-card')])
-    .filter(([,card])=>card));
   if (!items.length) {
     const empty = document.createElement('div');
     empty.className = 'empty';
@@ -1383,16 +1443,12 @@ function rows(items, kind, emptyText, list = $('activity'), limit = 24) {
       kind === 'message' ? 'Listening for decoded messages…' : 'Waiting for receiver measurements.');
     content.append(empty);
   }
-  for (const item of kind==='aircraft'?items:items.slice(0,limit)) {
+  for (const item of items.slice(0,limit)) {
     const row = $('thing').content.cloneNode(true);
     row.querySelector('.item-icon').innerHTML = icon(kind);
     row.querySelector('strong').textContent = item.title || 'Received signal';
     row.querySelector('small').textContent = item.tag || '';
     row.querySelector('.item-detail').textContent = item.detail || '';
-    if (kind==='aircraft') {
-      content.append(aircraftRecord(item,row,openAircraft,openAircraftCards));
-      continue;
-    }
     if (kind==='message') {
       content.append(messageRecord(item,row,openMessages,openHelp));
       continue;
@@ -1406,7 +1462,10 @@ function rows(items, kind, emptyText, list = $('activity'), limit = 24) {
 function wireAircraftSelection(record,summary,item,origin) {
   rememberAircraftIdentity(item);
   selectionRecords.set(record,item);
-  summary.addEventListener('click',()=>selectAircraft(item,{origin,reveal:true}));
+  summary.addEventListener('click',()=>{
+    const current=selectionRecords.get(record);
+    if (current) selectAircraft(current,{origin,reveal:true});
+  });
   paintAircraftSelectionRecord(record);
 }
 

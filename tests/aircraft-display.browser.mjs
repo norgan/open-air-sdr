@@ -227,7 +227,7 @@ try{
   releasePendingIdentity();
   assert.doesNotMatch(await recordFor('LOCAL124').innerText(),/Pending Air/);
   await recordFor('AWAITING').locator('summary').click();
-  await recordFor('AWAITING').locator('.aircraft-photo-link, .aircraft-photo-fallback').first().scrollIntoViewIfNeeded();
+  await recordFor('AWAITING').locator('.aircraft-photo-frame').scrollIntoViewIfNeeded();
   await recordFor('AWAITING').locator('.aircraft-photo-fallback').filter({hasText:'No aircraft photo available.'}).waitFor();
   assert.match(await recordFor('AWAITING').innerText(),/NO POSITION/);
   assert.equal(identityCount('ABC125'),1);

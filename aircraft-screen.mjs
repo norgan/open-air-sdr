@@ -87,7 +87,7 @@ export function initialiseAircraftScreen({document:doc=globalThis.document,windo
   }
   function keydown(event) {
     if(!active())return;
-    if(event.key==='Escape'&&fallback) {
+    if(event.key==='Escape') {
       event.preventDefault();
       void exit();
       return;

@@ -83,6 +83,28 @@ test('native fullscreen exit restores scroll and focus without replacing the sta
   assert.equal(f.doc.body.classList.contains('aircraft-screen-active'),false);
 });
 
+test('Escape explicitly exits native fullscreen once and restores the previous view',async()=>{
+  const f=fixture();
+  await f.api.enter();
+  let prevented=0;
+  f.doc.dispatch('keydown',{key:'Escape',preventDefault(){prevented++;}});
+  await Promise.resolve();
+  assert.equal(prevented,1);
+  assert.equal(f.counts().exits,1);
+  assert.equal(f.doc.fullscreenElement,null);
+  assert.equal(f.ids.get('aircraft-fullscreen').getAttribute('aria-pressed'),'false');
+  assert.equal(f.ids.get('aircraft-screen-switch').hidden,true);
+  assert.equal(f.doc.activeElement,f.focusBefore);
+  assert.deepEqual(f.scrolled,[[12,350]]);
+
+  // A late native notification or another Escape must not restore or exit a second time.
+  f.doc.dispatch('fullscreenchange');
+  f.doc.dispatch('keydown',{key:'Escape',preventDefault(){prevented++;}});
+  assert.equal(f.counts().exits,1);
+  assert.equal(prevented,1);
+  assert.deepEqual(f.scrolled,[[12,350]]);
+});
+
 test('rejected browser fullscreen falls back to an expanded screen and Esc returns',async()=>{
   const f=fixture({reject:true});
   await f.api.enter();

@@ -48,6 +48,7 @@ export function initialiseDetachedPanel({document:doc=globalThis.document,window
   let sequence=0;
   let selectedHex;
   let selectedCard;
+  let renderedRadarSvg;
   let active=true;
   let received=false;
   const radarItems=new WeakMap();
@@ -108,8 +109,13 @@ export function initialiseDetachedPanel({document:doc=globalThis.document,window
       else map.hidden=true;
     } else {
       $('detached-map-status').hidden=true;
-      const svg=sanitiseRadarSvg(payload.radarSvg,doc);
-      radar.replaceChildren(...(svg?[svg]:[]));
+      const focusedHex=radar.contains(doc.activeElement)?doc.activeElement?.getAttribute('data-aircraft-hex'):null;
+      let svg=radar.firstElementChild;
+      if(renderedRadarSvg!==payload.radarSvg||!svg){
+        svg=sanitiseRadarSvg(payload.radarSvg,doc);
+        radar.replaceChildren(...(svg?[svg]:[]));
+        renderedRadarSvg=payload.radarSvg;
+      }
       hasDisplay=Boolean(svg);
       if(svg) {
         const tracked=items.filter(item=>Number.isFinite(item.distanceKm)&&Number.isFinite(item.bearing));
@@ -117,13 +123,17 @@ export function initialiseDetachedPanel({document:doc=globalThis.document,window
         groups.forEach((group,index)=>{
           const hex=group.getAttribute('data-aircraft-hex');
           const item=(hex?items.find(item=>item.hex?.toLowerCase()===hex.toLowerCase()):null)||tracked[index];if(!item)return;
+          const wired=radarItems.has(group);
           radarItems.set(group,item);
           group.setAttribute('role','button');group.setAttribute('tabindex','0');
           group.setAttribute('aria-label','Aircraft details for '+(item.title||item.hex));
           group.style.cursor='pointer';
-          group.addEventListener('click',()=>showRadarCard(item));
-          group.addEventListener('keydown',event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();showRadarCard(item);}});
+          if(!wired){
+            group.addEventListener('click',()=>showRadarCard(radarItems.get(group)));
+            group.addEventListener('keydown',event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();showRadarCard(radarItems.get(group));}});
+          }
         });
+        if(focusedHex){[...svg.querySelectorAll('[data-aircraft-hex]')].find(node=>node.getAttribute('data-aircraft-hex')===focusedHex)?.focus({preventScroll:true});}
       }
     }
     highlightRadar();
