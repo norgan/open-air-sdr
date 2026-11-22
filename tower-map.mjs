@@ -43,6 +43,18 @@ export function createTowerMap(container, status, {createCard,updateCard} = {}) 
   let lastAircraft;
   let rendered;
   const markers = new Map();
+  const popupMaxHeight=()=>Math.max(100,Math.floor(container.clientHeight||320)-80);
+  function resizeMap() {
+    if(container.hidden||!map)return;
+    map.invalidateSize();
+    const maxHeight=popupMaxHeight();
+    for(const marker of markers.values()){
+      const popup=marker.pin.getPopup?.();
+      if(!popup||popup.options.maxHeight===maxHeight)continue;
+      popup.options.maxHeight=maxHeight;
+      if(marker.pin.isPopupOpen?.())popup.update?.();
+    }
+  }
   function paintSelection() {
     for(const marker of markers.values()){
       const active=matchesAircraft(marker.item);
@@ -55,7 +67,16 @@ export function createTowerMap(container, status, {createCard,updateCard} = {}) 
       element?.setAttribute?.('aria-label',title);
     }
   }
-  subscribeAircraftSelection(paintSelection);
+  subscribeAircraftSelection(event=>{
+    paintSelection();
+    let selected;
+    for(const marker of markers.values()){
+      if(matchesAircraft(marker.item))selected=marker;
+      else if(marker.pin.isPopupOpen?.())marker.pin.closePopup?.();
+    }
+    if(container.hidden||!event.reveal||['map','enrichment','parent'].includes(event.origin))return;
+    selected?.pin.openPopup?.();
+  });
 
   return async function show(centre, aircraft) {
     if (container.hidden || !centre) return;
@@ -80,9 +101,9 @@ export function createTowerMap(container, status, {createCard,updateCard} = {}) 
           }
         });
         tiles.addTo(map);
-        new ResizeObserver(() => { if (!container.hidden) map.invalidateSize(); }).observe(container);
+        new ResizeObserver(resizeMap).observe(container);
       }
-      map.invalidateSize();
+      resizeMap();
       if (centreKey !== key) {
         centreKey = key;
         map.setView(point, 9);
@@ -108,7 +129,7 @@ export function createTowerMap(container, status, {createCard,updateCard} = {}) 
           const pin = leaflet.marker(coordinates, {
             icon:leaflet.divIcon({className:'tower-aircraft-marker',html:icon,iconSize:[28,28]}),
             title:item.title, alt:item.title,
-          }).bindPopup(label,{maxWidth:380,minWidth:230}).addTo(map);
+          }).bindPopup(label,{maxWidth:380,minWidth:230,maxHeight:popupMaxHeight()}).addTo(map);
           marker = {pin, shape, item, card:null};
           const current=marker;
           pin.on?.('popupopen',()=>{

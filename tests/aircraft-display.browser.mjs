@@ -304,6 +304,8 @@ try{
   assert.equal(await page.locator('#tower-map .tower-aircraft-marker[data-aircraft-hex="abc124"]').getAttribute('aria-pressed'),'true',
     'selecting an aircraft row highlights its map icon');
   await recordFor('LOCAL124').locator('.aircraft-profile-status').filter({hasText:'No additional aircraft details found.'}).waitFor();
+  await page.locator('#tower-map .leaflet-popup-content .aircraft-profile-flight')
+    .filter({hasText:'LOCAL124'}).waitFor();
   releasePendingIdentity();
   assert.doesNotMatch(await recordFor('LOCAL124').innerText(),/Pending Air/);
   await recordFor('AWAITING').locator('summary').click();
@@ -332,16 +334,27 @@ try{
   }
 
   // The actual Leaflet wheel handler changes the geographic map zoom.
-  const popupClose=page.locator('#tower-map .leaflet-popup-close-button');
-  if(await popupClose.isVisible())await popupClose.click();
   const mapTarget=page.locator('#tower-map');
+  await mapTarget.scrollIntoViewIfNeeded();
+  const popup=page.locator('#tower-map .leaflet-popup');
+  if(await popup.count()){
+    await page.locator('#tower-map .leaflet-popup-close-button').click();
+    await popup.waitFor({state:'detached'});
+  }
   await mapTarget.scrollIntoViewIfNeeded();
   const initialZoom=await tileZoom();
   const mapBox=await mapTarget.boundingBox();
   assert.ok(mapBox&&mapBox.width>0&&mapBox.height>0,'the map has a rendered wheel target');
-  const pointer={x:mapBox.x+mapBox.width/2,y:mapBox.y+mapBox.height/2};
-  assert.equal(await page.evaluate(point=>Boolean(document.elementFromPoint(point.x,point.y)?.closest('#tower-map')),pointer),true,
-    'the wheel coordinates are inside the visible geographic map');
+  const pointer=await page.evaluate(box=>{
+    for(const [across,down] of [[.5,.5],[.25,.25],[.75,.25],[.25,.75],[.75,.75]]){
+      const point={x:box.x+box.width*across,y:box.y+box.height*down};
+      const target=document.elementFromPoint(point.x,point.y);
+      if(target?.closest('#tower-map')&&!target.closest('.leaflet-popup,.leaflet-control,.tower-aircraft-marker'))
+        return {...point,target:target.tagName+'.'+target.className};
+    }
+    return null;
+  },mapBox);
+  assert.ok(pointer,'the wheel coordinates are over the map background rather than a scrollable aircraft card');
   await page.mouse.move(pointer.x,pointer.y);
   console.log('Wheel zoom starts at',initialZoom,'with pointer',JSON.stringify(pointer),JSON.stringify(await wheelDiagnostics()));
   await page.mouse.wheel(0,-360);
@@ -358,7 +371,7 @@ try{
   await page.locator('#aircraft-screen-radar').click();
   await waitVisible('#radar');
   assert.equal(await page.locator('#tower-map').isVisible(),false);
-  await page.locator('#radar .radar-aircraft[data-aircraft-hex="abc124"]').click();
+  await page.locator('#radar .radar-aircraft[data-aircraft-hex="abc124"] path').click();
   assert.equal(await recordFor('LOCAL124').getAttribute('open'),'','radar selection opens the matching aircraft row');
   assert.equal(await recordFor('LOCAL124').locator('summary').getAttribute('aria-current'),'true');
   await page.locator('#aircraft-screen-map').click();
