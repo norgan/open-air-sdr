@@ -10,6 +10,26 @@ import { availableSources } from '../sources.mjs';
 
 const require=createRequire(import.meta.url);
 const leafletDirectory=dirname(require.resolve('leaflet/package.json'));
+function renderedTileZoom({selector,minimum}={}) {
+  const map=document.querySelector(selector);
+  if(!map||map.classList.contains('leaflet-zoom-anim')||map.querySelector('.leaflet-zoom-anim'))return null;
+  const levels=[...map.querySelectorAll('.leaflet-tile-container')].map(element=>({element,
+    order:Number(getComputedStyle(element).zIndex)||0,
+  })).sort((left,right)=>right.order-left.order);
+  for(const {element} of levels){
+    const zooms=[...element.querySelectorAll('img.leaflet-tile-loaded')].map(image=>{
+      try{
+        const url=new URL(image.currentSrc||image.src);
+        const match=url.hostname==='tile.openstreetmap.org'&&url.pathname.match(/^\/(\d+)\//);
+        return match?Number(match[1]):Number.NaN;
+      }catch{return Number.NaN;}
+    }).filter(Number.isFinite);
+    if(!zooms.length)continue;
+    const zoom=Math.max(...zooms);
+    return Number.isFinite(minimum)&&zoom<=minimum?null:zoom;
+  }
+  return null;
+}
 const localAircraft=[
   {hex:'abc123',title:'LOCAL123',tag:'A320',detail:'6,200 ft · 1.8 km',source:'Local receiver',
     registration:'G-TEST',lat:51.505,lon:-0.11,altitude:6200,speed:245,heading:75,distanceKm:1.8,bearing:70},
@@ -29,6 +49,7 @@ const profile={name:'Preview area',includeSydney:false,aircraftCentre:centre,
   scan:{startFrequency:118e6,stopFrequency:137e6,threshold:12},presets:[]};
 let tunes=0;
 let snapshotReads=0;
+let waterfallBoosted=false;
 const receiver={
   selectedSource:availableSources.find(item=>item.id==='adsb'),
   async snapshot(){
@@ -49,6 +70,22 @@ const origin='http://127.0.0.1:'+port;
 const service=appServer(receiver,port,{
   profileStore:{async read(){return profile;}},
   async aircraftRequest(){throw Error('Live aircraft provider disabled in browser fixture.');},
+  desktopSpectrum:true,
+});
+// A local event stream exercises the real waterfall renderer and detached-frame bridge.
+const applicationRequests=service.listeners('request');
+service.removeAllListeners('request');
+service.on('request',(request,response)=>{
+  if(request.method==='GET'&&new URL(request.url,origin).pathname==='/api/waterfall'){
+    response.writeHead(200,{'Content-Type':'text/event-stream','Cache-Control':'no-store','Connection':'keep-alive'});
+    const sendFrame=()=>response.write('data: '+JSON.stringify({centre:1090100000,span:2400000,
+      power:Array.from({length:64},(_,index)=>waterfallBoosted&&index===32?-60:-90)})+'\n\n');
+    sendFrame();
+    const timer=setInterval(sendFrame,50);
+    response.once('close',()=>clearInterval(timer));
+    return;
+  }
+  for(const listener of applicationRequests)listener.call(service,request,response);
 });
 await new Promise((resolve,reject)=>{service.once('error',reject);service.listen(port,'127.0.0.1',resolve);});
 let browser,page;
@@ -142,8 +179,10 @@ try{
       return record?.querySelector('.item-detail')?.textContent!==before;
     },{callsign,before});
   };
-  const tileZoom=()=>page.locator('#tower-map img.leaflet-tile').evaluateAll(images=>
-    Math.max(...images.map(image=>Number(new URL(image.src).pathname.split('/')[1]))));
+  const tileZoom=async()=>{
+    const value=await page.waitForFunction(renderedTileZoom,{selector:'#tower-map'});
+    return value.jsonValue();
+  };
   const enterAircraftFullscreen=async()=>{
     await page.locator('#aircraft-fullscreen').click();
     await page.waitForFunction(()=>Boolean(document.fullscreenElement)||
@@ -254,11 +293,28 @@ try{
   // The actual Leaflet wheel handler changes the geographic map zoom.
   const popupClose=page.locator('#tower-map .leaflet-popup-close-button');
   if(await popupClose.isVisible())await popupClose.click();
+  const mapTarget=page.locator('#tower-map');
+  await mapTarget.scrollIntoViewIfNeeded();
   const initialZoom=await tileZoom();
-  await page.locator('#tower-map').hover();
+  const mapBox=await mapTarget.boundingBox();
+  assert.ok(mapBox&&mapBox.width>0&&mapBox.height>0,'the map has a rendered wheel target');
+  const pointer={x:mapBox.x+mapBox.width/2,y:mapBox.y+mapBox.height/2};
+  assert.equal(await page.evaluate(point=>Boolean(document.elementFromPoint(point.x,point.y)?.closest('#tower-map')),pointer),true,
+    'the wheel coordinates are inside the visible geographic map');
+  await page.mouse.move(pointer.x,pointer.y);
+  console.log('Wheel zoom starts at',initialZoom,'with pointer',JSON.stringify(pointer));
   await page.mouse.wheel(0,-360);
-  await page.waitForFunction(before=>Math.max(...[...document.querySelectorAll('#tower-map img.leaflet-tile')]
-    .map(image=>Number(new URL(image.src).pathname.split('/')[1])))>before,initialZoom);
+  try{
+    await page.waitForFunction(renderedTileZoom,{selector:'#tower-map',minimum:initialZoom});
+  }catch(error){
+    console.log('Wheel zoom DOM state',JSON.stringify(await page.evaluate(()=>({
+      classes:document.getElementById('tower-map').className,
+      levels:[...document.querySelectorAll('#tower-map .leaflet-tile-container')].map(element=>({
+        style:element.getAttribute('style'),sources:[...element.querySelectorAll('img')].map(image=>image.currentSrc||image.src),
+      })),
+    }))));
+    throw error;
+  }
   const zoomBeforeFullscreen=await tileZoom();
   await enterAircraftFullscreen();
   assert.equal(await page.locator('#aircraft-screen-map').getAttribute('aria-pressed'),'true');
@@ -454,38 +510,16 @@ try{
   await page.setViewportSize({width:1280,height:1000});
   await page.locator('#nav-receiver').click();
   await waitVisible('#waterfall-popout');
-  const paintWaterfall=colour=>page.locator('#waterfall').evaluate((canvas,fill)=>{
-    canvas.dataset.fixtureColour=fill;
-    const context=canvas.getContext('2d');
-    context.fillStyle=fill;
-    context.fillRect(0,0,canvas.width,canvas.height);
-    context.fillStyle='#ffda66';
-    context.fillRect(Math.round(canvas.width/3),0,24,canvas.height);
-  },colour);
-  await paintWaterfall('#2064dc');
-  // Keep synthetic samples flowing while ordinary RF polling clears its own empty stream state.
-  const waterfallPainter=await page.evaluate(()=>{
-    const paint=()=>{
-      const canvas=document.getElementById('waterfall');
-      const context=canvas.getContext('2d');
-      context.fillStyle=canvas.dataset.fixtureColour||'#2064dc';
-      context.fillRect(0,0,canvas.width,canvas.height);
-      context.fillStyle='#ffda66';
-      context.fillRect(Math.round(canvas.width/3),0,24,canvas.height);
-      document.getElementById('waterfall-frequency').textContent='1090.000 MHz centre · test frame';
-    };
-    paint();
-    return setInterval(paint,60);
-  });
+  waterfallBoosted=false;
   const waterfallWindow=await openDetachedPanel('#waterfall-popout');
   await waterfallWindow.waitForFunction(()=>{
     const canvas=document.getElementById('detached-waterfall');
     if(!canvas?.width||!canvas.height)return false;
-    const [r,g,b]=canvas.getContext('2d').getImageData(canvas.width/2,canvas.height/2,1,1).data;
+    const [r,g,b]=canvas.getContext('2d').getImageData(canvas.width/2,0,1,1).data;
     return b>g&&g>r;
   });
   assert.equal(await waterfallWindow.locator('#nav-signals').count(),0);
-  assert.match(await waterfallWindow.locator('#detached-caption').innerText(),/1090\.000/);
+  assert.match(await waterfallWindow.locator('#detached-caption').innerText(),/1090\.100/);
   const firstWaterfallSize=await waterfallWindow.locator('#detached-waterfall').evaluate(canvas=>{
     const rect=canvas.getBoundingClientRect();
     return {width:rect.width,height:rect.height};
@@ -495,23 +529,23 @@ try{
     const rect=document.getElementById('detached-waterfall').getBoundingClientRect();
     return rect.width!==before.width||rect.height!==before.height;
   },firstWaterfallSize);
-  await paintWaterfall('#28ba6a');
-  await waterfallWindow.waitForFunction(()=>{
+  const previousFrame=Number(await waterfallWindow.locator('#detached-waterfall').getAttribute('data-frame'));
+  waterfallBoosted=true;
+  await waterfallWindow.waitForFunction(previous=>{
     const canvas=document.getElementById('detached-waterfall');
-    const [r,g,b]=canvas.getContext('2d').getImageData(canvas.width/2,canvas.height/2,1,1).data;
-    return g>b&&g>r;
-  });
+    const [r,g,b]=canvas.getContext('2d').getImageData(canvas.width/2,0,1,1).data;
+    return Number(canvas.dataset.frame)>previous&&g>b&&g>r;
+  },previousFrame);
   const waterfallWindowCount=context.pages().length;
   await page.bringToFront();
   await page.locator('#waterfall-popout').click();
   assert.equal(context.pages().length,waterfallWindowCount,'the waterfall button reuses its detached window');
   await waterfallWindow.screenshot({path:'test-results/waterfall-detached-window.png'});
   await waterfallWindow.close();
-  await paintWaterfall('#2064dc');
+  waterfallBoosted=false;
   const reopenedWaterfallWindow=await openDetachedPanel('#waterfall-popout');
   await reopenedWaterfallWindow.locator('#detached-waterfall').waitFor({state:'visible'});
   await reopenedWaterfallWindow.close();
-  await page.evaluate(timer=>clearInterval(timer),waterfallPainter);
   assert.equal(childApiRequests.filter(url=>new URL(url).pathname!=='/api/aircraft-info').length,0,
     'detached panels share parent data instead of polling RF or network positions');
   assert.equal(tunes,0,'Map/Radar and appearance controls never retune');
