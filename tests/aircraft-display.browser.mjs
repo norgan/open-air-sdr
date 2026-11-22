@@ -429,14 +429,14 @@ try{
   const nearMessage=page.locator('#history-results .message-record[data-message="msg-near-match"]');
   const payloadMessage=page.locator('#history-results .message-record[data-message="msg-payload-only"]');
   await matchingMessage.waitFor({state:'visible'});
-  await nearMessage.locator('summary').click();
+  await nearMessage.locator(':scope > summary').click();
   assert.equal(await nearMessage.getAttribute('data-aircraft-hex')||'','',
     'a registration prefix is not treated as the same aircraft');
   assert.notEqual(await aircraftWindow.locator('.tower-aircraft-marker[data-aircraft-hex="abc123"]').getAttribute('aria-pressed'),'true');
-  await payloadMessage.locator('summary').click();
+  await payloadMessage.locator(':scope > summary').click();
   assert.equal(await payloadMessage.getAttribute('data-aircraft-hex')||'','',
     'a registration mention inside a payload is not an aircraft identity');
-  await matchingMessage.locator('summary').click();
+  await matchingMessage.locator(':scope > summary').click();
   assert.equal(await matchingMessage.getAttribute('data-aircraft-hex'),'abc123');
   await aircraftWindow.waitForFunction(()=>
     document.querySelector('.tower-aircraft-marker[data-aircraft-hex="abc123"]')?.getAttribute('aria-pressed')==='true');
