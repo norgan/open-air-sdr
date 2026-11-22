@@ -119,7 +119,9 @@ export function createAircraftSelection({maxEntries=maximumEntries,eventTarget=(
     const right=resolve(chosen);
     if(left.hex&&right.hex)return left.hex===right.hex;
     if(identity.registration&&chosen.registration){
-      return registrationKey(identity.registration)===registrationKey(chosen.registration);
+      const key=registrationKey(identity.registration);
+      if(key!==registrationKey(chosen.registration))return false;
+      return owners('registration:'+key).length<=1;
     }
     if(identity.registration&&right.registration&&registrationKey(identity.registration)!==registrationKey(right.registration))return false;
     if(chosen.registration&&left.registration&&registrationKey(chosen.registration)!==registrationKey(left.registration))return false;

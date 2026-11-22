@@ -50,6 +50,9 @@ export function createTowerMap(container, status, {createCard,updateCard} = {}) 
       element?.classList?.toggle('aircraft-selected',active);
       element?.setAttribute?.('aria-pressed',String(active));
       element?.setAttribute?.('data-aircraft-hex',String(marker.item.hex||'').toLowerCase());
+      const title=String(marker.item.title||marker.item.hex||'Aircraft');
+      element?.setAttribute?.('title',title);
+      element?.setAttribute?.('aria-label',title);
     }
   }
   subscribeAircraftSelection(paintSelection);

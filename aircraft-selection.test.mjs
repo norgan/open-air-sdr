@@ -53,6 +53,21 @@ test('registry is bounded and does not retain aliases of evicted aircraft',()=>{
   state.selectAircraft({registration:'VH-TEST'});
   assert.equal(state.selectedAircraft().hex,'');
 });
+
+test('ambiguous registration-only messages never select two hex addresses',()=>{
+  const state=createAircraftSelection();
+  state.rememberAircraftIdentity(plane);
+  const second={hex:'abc124',registration:'VH-TEST',callsign:'OTHER12'};
+  state.rememberAircraftIdentity(second);
+  state.selectAircraft({title:'VH-TEST'},{origin:'message'});
+  assert.equal(state.selectedAircraft().hex,'');
+  assert.equal(state.matchesAircraft(plane),false);
+  assert.equal(state.matchesAircraft(second),false);
+  state.selectAircraft({hex:'abc123'});
+  assert.equal(state.matchesAircraft({title:'VH-TEST'}),false);
+  assert.equal(state.matchesAircraft({...plane,callsign:'UPDATED'}),true,'an exact hex remains authoritative');
+  assert.equal(state.matchesAircraft(second),false);
+});
 test('selection events preserve the origin, support silent parent updates and return copies',()=>{
   const state=createAircraftSelection();
   const events=[];
