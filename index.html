@@ -10,7 +10,10 @@
   <title>Open Air</title>
   <link rel="stylesheet" href="/style.css">
   <link rel="stylesheet" href="/cb-panel.css">
+  <link rel="stylesheet" href="/aircraft-screen.css">
+  <link rel="stylesheet" href="/aircraft-card.css">
   <script type="module" src="/app.js"></script>
+  <script type="module" src="/aircraft-screen.mjs"></script>
 </head>
 <body>
   <a class="skip" href="#main">Skip to reception</a>
@@ -250,6 +253,7 @@
       <div id="history-results" class="activity-list" aria-label="Saved messages"></div>
     </section>
     <section class="metrics" id="metrics" aria-label="Reception measurements"></section>
+    <p id="detached-panel-notice" class="notice" role="status" hidden></p>
     <div class="pane-grid">
       <section class="panel stage" aria-labelledby="stage-title">
         <div class="panel-top">
@@ -271,6 +275,15 @@
             </div>
           </details>
           <span id="stage-tag" class="tag">LOCAL</span>
+          <div id="aircraft-screen-actions" class="aircraft-screen-actions" hidden>
+            <div id="aircraft-screen-switch" class="aircraft-screen-switch tower-layout" role="group" aria-label="Fullscreen aircraft display" hidden>
+              <button id="aircraft-screen-map" class="control" type="button" aria-pressed="false">Map</button>
+              <button id="aircraft-screen-radar" class="control" type="button" aria-pressed="false">Radar</button>
+            </div>
+            <span id="aircraft-screen-hint" class="aircraft-screen-hint" hidden>Esc to exit</span>
+            <button id="aircraft-popout" class="control" type="button" title="Open this aircraft display in a separate resizable window">Pop out</button>
+            <button id="aircraft-fullscreen" class="control" type="button" aria-pressed="false" title="Show the aircraft map or radar fullscreen">Fullscreen</button>
+          </div>
         </div>
         <div id="stage-content" class="stage-content">
           <canvas id="scope" role="img" aria-label="Received radio power across the tuned bandwidth"></canvas>
@@ -280,7 +293,7 @@
           <div id="stage-empty" class="empty" hidden></div>
         </div>
         <section id="waterfall-panel" class="waterfall-panel" hidden>
-          <div class="panel-top"><div><h2>Waterfall</h2><p id="waterfall-frequency">Waiting for live samples</p></div></div>
+          <div class="panel-top"><div><h2>Waterfall</h2><p id="waterfall-frequency">Waiting for live samples</p></div><button id="waterfall-popout" class="control" type="button" title="Open the waterfall in a separate resizable window">Pop out</button></div>
           <canvas id="waterfall" width="512" height="192" role="img" aria-label="Signal power across frequency over time"></canvas>
           <div id="waterfall-empty" class="waterfall-empty" hidden></div>
           <div id="waterfall-resize" role="separator" tabindex="0" aria-label="Resize waterfall" aria-orientation="horizontal" aria-controls="waterfall" aria-valuemin="96" aria-valuemax="720" aria-valuenow="192" title="Drag or use the arrow keys to adjust waterfall height"></div>

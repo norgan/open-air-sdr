@@ -33,7 +33,7 @@ function position(record, centre, time) {
     Number.isInteger(squawk) && squawk >= 0 && squawk <= 7777 ? String(squawk).padStart(4, '0') : undefined;
   return {
     hex:hex.toLowerCase(), lat, lon,
-    title: ident || reg || hex.toUpperCase(),
+    title: ident || reg || hex.toUpperCase(), callsign:ident,
     tag: altitude === 'ground' ? 'GROUND' : Number.isFinite(altitude) ? altitude.toLocaleString('en-AU') + ' ft' : '',
     detail: [typeof type === 'string' && type.slice(0, 12), relative.distanceKm.toFixed(0) + ' km'].filter(Boolean).join(' · '),
     source:'adsb.lol', registration:reg, aircraftType, category:text(category, 12),

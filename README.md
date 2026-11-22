@@ -8,6 +8,12 @@ Open Air runs an RTL-SDR receiver through headless SDRangel. From your browser y
 
 Open **Display** above either aircraft view to change the aircraft colour, outline, size and map opacity. The shared settings update both views immediately and are saved in your browser. Map opacity changes the base tiles while keeping aircraft, labels and attribution at full strength. **Reset** restores the high-contrast defaults.
 
+Use the mouse wheel over a map to zoom. **Fullscreen** fills the display with the aircraft map or radar; press **Esc** or **Exit fullscreen** to return. **Pop out** opens the aircraft view or waterfall in a separate resizable window while the main controls stay available. Keep the main Open Air window open to supply live updates to the detached displays.
+
+Click a plane marker or radar icon to select it and open its matching aircraft entry. Selecting an entry highlights the same aircraft in the main and detached displays. Decoded messages are linked through exact ICAO addresses, registrations or callsigns when those identifiers are available.
+
+Expanded aircraft cards and map popups show the airline, a database-supplied flight number when available, registration, model and an attributed aircraft photo. Callsigns remain visible separately; alphanumeric operational callsigns are not converted into assumed flight numbers. Identity data is looked up on demand through [adsbdb](https://www.adsbdb.com/), and photo thumbnails link to their credited [Planespotters.net](https://www.planespotters.net/) photographers. These lookups do not supply aircraft positions or retune the receiver.
+
 One tuner cannot stay on airband voice and 1090 MHz simultaneously. Tower uses network positions for that reason. Receiving both ATC and ADS-B locally at the same time requires a second receiver.
 
 **Messages** keeps the latest 500 decoded ACARS and VDL Mode 2 messages on your receiver server. Open a message to inspect its metadata, complete decoded payload, raw frame and **Meaning** notes for recognised labels, positions, airport codes and system identifiers. [ACARS application formats](https://github.com/szpajder/libacars/blob/master/doc/PROG_GUIDE.md) · [Message labels](https://github.com/brmlab/acarsdec/blob/master/datasets/acars_mls.txt)

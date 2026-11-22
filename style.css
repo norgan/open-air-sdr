@@ -163,11 +163,10 @@ body[data-view=messages] :is(.pane-grid,.metrics,#frequency-readout,#scan-mux,#a
 .aircraft-record[open]>.activity-item::after{transform:rotate(225deg);margin-top:12px}
 .aircraft-record>.activity-item:hover{background:#20282d}
 .aircraft-record>.activity-item:focus-visible{outline:2px solid var(--accent);outline-offset:-3px}
+.aircraft-record.aircraft-selected>.activity-item,.message-record.aircraft-selected>.activity-item{background:#25322b;box-shadow:inset 3px 0 0 var(--accent)}
+.radar-aircraft.aircraft-selected path,.tower-aircraft-marker.aircraft-selected path{stroke:var(--accent)!important;stroke-width:2.5!important;filter:drop-shadow(0 0 4px var(--aircraft-colour))}
+.radar-aircraft.aircraft-selected text{font-weight:700;filter:drop-shadow(0 0 3px var(--aircraft-outline))}
 .aircraft-record-content{margin:0 12px 12px 51px;padding:11px 12px 12px;border:1px solid var(--line);border-radius:8px;background:#12171e}
-.aircraft-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:10px;margin:0}
-.aircraft-fields div{min-width:0}
-.aircraft-fields dt{color:var(--weak);font:10px var(--mono);letter-spacing:.45px;text-transform:uppercase}
-.aircraft-fields dd{margin:4px 0 0;color:var(--text);font-size:12px;overflow-wrap:anywhere}
 .message-record{border-bottom:1px solid var(--line)}
 .message-record:last-child{border-bottom:0}
 .message-record>.activity-item{border:0;cursor:pointer;list-style:none}
@@ -189,7 +188,7 @@ body[data-view=messages] :is(.pane-grid,.metrics,#frequency-readout,#scan-mux,#a
 .message-help summary{width:max-content;color:var(--accent2);cursor:pointer}
 .message-help div{margin-top:5px;padding:6px 9px;border-left:2px solid var(--accent2);background:var(--bg);border-radius:3px}
 .message-help p{margin:4px 0;line-height:1.45}
-@media(max-width:600px){.aircraft-record-content,.message-record-content{margin-left:12px}.aircraft-fields,.message-fields{grid-template-columns:1fr 1fr}}
+@media(max-width:600px){.aircraft-record-content,.message-record-content{margin-left:12px}.message-fields{grid-template-columns:1fr 1fr}}
 @media(max-width:790px){.view-nav{flex-wrap:wrap}.aircraft-display-controls{grid-template-columns:repeat(2,minmax(0,1fr))}#aircraft-style-reset{justify-self:start}}
 .setup-panel fieldset {
   min-width: 0;

@@ -40,9 +40,14 @@ export function aircraftDetailFields(item = {}) {
   const reportedAt = first(item,['reportedAt','position']);
   return [
     field('Callsign', callsign && callsign.toUpperCase() !== hex ? callsign : null),
+    field('Airline', item.airline),
+    field('Flight number', item.flightNumber),
     field('ICAO address', hex),
     field('Registration', item.registration),
     field('Aircraft type', first(item,['aircraftType','type'])),
+    field('Model', item.model),
+    field('Manufacturer', item.manufacturer),
+    field('Registered owner', item.registeredOwner),
     field('Category', item.category),
     field('Source', item.source),
     field('Status', item.onSurface === true || item.tag === 'GROUND' ? 'On ground' : item.onSurface === false ? 'Airborne' : null),

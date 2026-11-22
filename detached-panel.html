@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="darkreader-lock">
+  <title>Open Air display</title>
+  <link rel="stylesheet" href="/detached-panel.css">
+  <link rel="stylesheet" href="/aircraft-card.css">
+  <script type="module" src="/detached-panel.mjs"></script>
+</head>
+<body>
+  <header class="detached-header">
+    <div class="detached-heading"><h1 id="detached-title">Open Air display</h1><p id="detached-caption">Connecting to the main Open Air window.</p></div>
+    <span id="detached-source" class="detached-source">CONNECTING</span>
+    <div id="detached-views" class="detached-actions" role="group" aria-label="Aircraft display" hidden>
+      <button id="detached-view-map" type="button" aria-pressed="false">Map</button>
+      <button id="detached-view-radar" type="button" aria-pressed="false">Radar</button>
+    </div>
+    <div class="detached-actions"><button id="detached-fullscreen" type="button" aria-pressed="false">Fullscreen</button><button id="detached-return" type="button">Return to app</button></div>
+  </header>
+  <main id="detached-content" aria-labelledby="detached-title">
+    <div id="detached-map" role="region" aria-label="Geographic map of aircraft" hidden></div>
+    <div id="detached-radar" role="region" aria-label="Aircraft radar" hidden></div>
+    <canvas id="detached-waterfall" role="img" aria-label="Live waterfall from the main receiver" hidden></canvas>
+    <p id="detached-map-status" class="detached-map-status" role="status" hidden></p>
+    <p id="detached-empty" class="detached-empty">Waiting for the main Open Air window.</p>
+    <aside id="detached-aircraft-details" class="detached-aircraft-details" aria-label="Aircraft details" hidden>
+      <button id="detached-details-close" class="detached-details-close" type="button">Close details</button>
+      <div id="detached-details-card"></div>
+    </aside>
+  </main>
+  <footer><span id="detached-status" role="status">Connecting</span><span id="detached-updated"></span></footer>
+</body>
+</html>

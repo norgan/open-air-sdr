@@ -1,0 +1,13 @@
+.aircraft-screen-actions{order:2;display:flex;align-items:center;gap:8px;margin-left:auto;flex-wrap:wrap}
+.aircraft-screen-switch{display:flex;gap:4px;margin-left:0}
+.aircraft-screen-hint{font-size:11px;color:var(--muted);white-space:nowrap}
+.stage:fullscreen,.stage.aircraft-screen-focus{display:flex;flex-direction:column;width:100vw;height:100vh;height:100dvh;max-width:none;max-height:none;margin:0;border:0;border-radius:0;background:var(--paper,#181d24);overflow:hidden}
+.stage.aircraft-screen-focus{position:fixed;inset:0;z-index:10000}
+.stage:fullscreen::backdrop{background:var(--bg,#101318)}
+.stage:is(:fullscreen,.aircraft-screen-focus)>.panel-top{flex:0 0 auto;min-height:0;padding:10px 14px;align-items:center}
+.stage:is(:fullscreen,.aircraft-screen-focus)>.stage-content{flex:1 1 auto;min-height:0;height:auto!important;width:100%}
+.stage:is(:fullscreen,.aircraft-screen-focus) #local-aircraft-layout,.stage:is(:fullscreen,.aircraft-screen-focus)>#waterfall-panel{display:none!important}
+.stage:is(:fullscreen,.aircraft-screen-focus) .aircraft-display-settings{margin-top:0;padding-top:7px}
+.stage:is(:fullscreen,.aircraft-screen-focus) #radar svg{height:100%;width:100%}
+body.aircraft-screen-active{overflow:hidden}
+@media(max-width:600px){.aircraft-screen-actions{gap:6px}.stage:is(:fullscreen,.aircraft-screen-focus)>.panel-top{padding:8px 10px}.aircraft-screen-hint{display:none}}

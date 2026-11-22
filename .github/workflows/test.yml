@@ -16,8 +16,8 @@ jobs:
       - name: Check browser JavaScript
         run: |
           node --input-type=module --check < app.js
-          node --check tower-map.mjs
-          node --check aircraft-appearance.mjs
+          for file in *.mjs; do node --check "$file"; done
+          bash -n deploy/update-web.sh
       - name: Run receiver tests
         run: node --test
       - name: Install browser test tools

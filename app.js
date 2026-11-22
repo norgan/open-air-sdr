@@ -1,13 +1,17 @@
 import { sources, availableSources, customSource, formatMHz, isAirbandScanChannel, isAirbandVoice, isSydneyPreset, localSource, receiverModes, sample } from '/sources.mjs';
 import { createCbPanel } from '/cb-panel.mjs';
 import { createLocalSetup } from '/local-setup.mjs';
-import { aircraftDetailFields, messageDetailFields, messageDetailKey } from '/detail-fields.mjs';
+import { messageDetailFields, messageDetailKey } from '/detail-fields.mjs';
+import { aircraftRecordKey, createAircraftCard, updateAircraftCard } from '/aircraft-card.mjs';
 import { explainMessage } from '/message-help.mjs';
 import { estimateSignal } from '/signal-meter.mjs';
 import { aircraftOutline, createTowerMap } from '/tower-map.mjs';
 import { applyAircraftAppearance, defaultAircraftAppearance, loadAircraftAppearance, saveAircraftAppearance } from '/aircraft-appearance.mjs';
+import { initialiseDetachedPanels } from '/detached-panels.mjs';
+import { aircraftIdentity, rememberAircraftIdentity, resolveAircraftIdentity, selectAircraft, selectedAircraft, matchesAircraft, subscribeAircraftSelection } from '/aircraft-selection.mjs';
 
 const $ = id => document.getElementById(id);
+const selectionRecords=new WeakMap();
 const icons = {
   aircraft: '<path d="M12 3v18m0-10 7 5m-7-5-7 5m7 2 3 2m-3-2-3 2"/>',
   message: '<path d="M5 5h14v12H9l-4 3V5Zm4 4h6m-6 4h8"/>',
@@ -32,6 +36,9 @@ const waterfallDivider = $('waterfall-resize');
 const waterfallMinimum = Number(waterfallDivider.getAttribute('aria-valuemin'));
 const waterfallMaximum = Number(waterfallDivider.getAttribute('aria-valuemax'));
 let waterfallDrag;
+let detachedPanels;
+let detachedAircraftContext='local';
+let lastWaterfallPaintAt=0;
 
 function resizeWaterfall(height, remember = false) {
   const size=Math.min(waterfallMaximum,Math.max(waterfallMinimum,Math.round(height)));
@@ -201,6 +208,8 @@ function drawWaterfall(row) {
   }
   waterfallContext.drawImage(waterfallCanvas,0,0,width,height-1,0,1,width,height-1);
   waterfallContext.putImageData(waterfallPixels,0,0);
+  lastWaterfallPaintAt=Date.now();
+  syncDetachedWaterfall();
 }
 
 function clearWaterfall(message) {
@@ -213,13 +222,16 @@ function clearWaterfall(message) {
   $('waterfall-frequency').textContent = message;
   $('waterfall-empty').textContent = message;
   $('waterfall-empty').hidden = false;
+  lastWaterfallPaintAt=0;
+  syncDetachedWaterfall();
 }
 
 function syncStreams() {
   const show = streamOptions.waterfall && mode==='live' && !closed;
   $('waterfall-panel').hidden = view !== 'receiver' && !show;
   syncAudio();
-  if(show && !document.hidden && !waterfallStream) {
+  const visible=!document.hidden||detachedPanels?.hasOpenPanels();
+  if(show && visible && !waterfallStream) {
     waterfallStream = new EventSource('/api/waterfall');
     waterfallStream.onmessage = event => {
       if (busy || !state.connected || !state.running) return;
@@ -237,7 +249,7 @@ function syncStreams() {
       if (streamOnline) clearWaterfall('Waiting for live samples');
       streamOnline = false;
     };
-  } else if((!show || document.hidden) && waterfallStream) {
+  } else if((!show || !visible) && waterfallStream) {
     waterfallStream.close();
     waterfallStream = null;
     streamOnline = false;
@@ -339,7 +351,10 @@ const audioModes = new Set(['am','nfm','bfm']);
 const viewTitles = {signals:'Signals',receiver:'Receiver',tower:'Tower','uhf-cb':'UHF CB',messages:'Messages',setup:'Setup'};
 const towerChannel = $('tower-channel');
 const towerSquelch = $('tower-squelch');
-const showTowerMap = createTowerMap($('tower-map'),$('tower-map-status'));
+const showTowerMap = createTowerMap($('tower-map'),$('tower-map-status'),{
+  createCard:createAircraftCard,
+  updateCard:updateAircraftCard,
+});
 function loadAircraftDisplay(key,fallback) {
   try {
     const display=window.localStorage.getItem(key);
@@ -376,6 +391,7 @@ function setAircraftAppearance(patch,persist=true) {
   if(view==='tower'&&towerDisplay==='radar')drawTowerTraffic(mode==='demo');
   else if(view==='signals'&&localAircraftDisplay==='radar'&&
           (sourceById(state.source)?.kind==='aircraft'||currentMode()==='adsb'))drawLocalAircraft(state,mode==='demo');
+  syncDetachedAircraft();
 }
 for(const [id,key] of [['aircraft-colour','colour'],['aircraft-outline','outline']]) {
   $(id).addEventListener('input',event=>setAircraftAppearance({[key]:event.currentTarget.value}));
@@ -659,7 +675,9 @@ function tuneTowerOnEntry() {
 }
 
 async function refreshAircraft() {
-  if (loadingAircraft || !localArea || view!=='tower' || mode!=='live' || closed || document.hidden) return;
+  const detachedTower=detachedPanels?.hasOpenPanels('aircraft')&&detachedAircraftContext==='tower';
+  if (loadingAircraft || !localArea || (view!=='tower'&&!detachedTower) || mode!=='live' || closed ||
+      (document.hidden&&!detachedPanels?.hasOpenPanels())) return;
   loadingAircraft=true;
   const centre=JSON.stringify(localArea.aircraftCentre);
   try {
@@ -670,6 +688,7 @@ async function refreshAircraft() {
   } finally {
     loadingAircraft=false;
     if (view==='tower' && mode==='live') drawTowerTraffic(false);
+    else syncDetachedAircraft();
     if (centre!==JSON.stringify(localArea.aircraftCentre)) void refreshAircraft();
   }
 }
@@ -924,7 +943,7 @@ $('scan-mux').addEventListener('click',()=>{
 });
 
 async function refreshScans() {
-  if (closed || busy || document.hidden || mode!=='live' || scanRefreshPending || scanActionPending ||
+  if (closed || busy || (document.hidden&&!detachedPanels?.hasOpenPanels()) || mode!=='live' || scanRefreshPending || scanActionPending ||
       ![scanState.cbScan,scanState.towerScan,scanState.rfScan].some(scanActive)) return;
   scanRefreshPending = true;
   const generation = scanGeneration;
@@ -1265,32 +1284,32 @@ function formattedTime(value) {
   const d = new Date(value);
   return Number.isFinite(d.getTime()) ? d.toLocaleTimeString('en-AU', {hour12:false, timeZoneName:'short'}) : '';
 }
-function aircraftRecord(item,row,openRecords) {
-  const key=JSON.stringify([item.hex||'',item.registration||'',item.title||'',item.source||'']);
+function aircraftRecord(item,row,openRecords,openCards) {
+  const key=aircraftRecordKey(item);
   const record=document.createElement('details');
   const summary=document.createElement('summary');
   const body=document.createElement('div');
-  const facts=document.createElement('dl');
   record.className='aircraft-record';
   record.dataset.aircraft=key;
   record.open=openRecords.has(key);
   summary.className='activity-item';
-  summary.title='Open aircraft details';
   const compact=row.querySelector('.activity-item');
   summary.append(...compact.childNodes);
+  wireAircraftSelection(record,summary,item,'list');
   body.className='aircraft-record-content';
-  facts.className='aircraft-fields';
-  for(const {label,value} of aircraftDetailFields(item)) {
-    const field=document.createElement('div');
-    const term=document.createElement('dt');
-    const description=document.createElement('dd');
-    term.textContent=label;
-    description.textContent=value;
-    field.append(term,description);
-    facts.append(field);
-  }
-  body.append(facts);
+  const mountCard=() => {
+    let card=body.querySelector('.aircraft-card') || openCards.get(key);
+    if (card) updateAircraftCard(card,item,{lookup:mode==='live'});
+    else card=createAircraftCard(item,{lookup:mode==='live'});
+    if (card.parentNode!==body) body.append(card);
+  };
+  const syncRecord=() => {
+    summary.title=record.open ? 'Close aircraft details' : 'Open aircraft details';
+    if (record.open) mountCard();
+  };
+  record.addEventListener('toggle',syncRecord);
   record.append(summary,body);
+  syncRecord();
   return record;
 }
 function messageRecord(item,row,openRecords,openHelp) {
@@ -1308,6 +1327,7 @@ function messageRecord(item,row,openRecords,openHelp) {
   summary.title='Open message details';
   const compact=row.querySelector('.activity-item');
   summary.append(...compact.childNodes);
+  wireAircraftSelection(record,summary,item,'message');
   body.className='message-record-content';
   facts.className='message-fields';
   for(const {label,value} of messageDetailFields(item)) {
@@ -1352,7 +1372,10 @@ function rows(items, kind, emptyText, list = $('activity'), limit = 24) {
   const content=document.createDocumentFragment();
   const openHelp=new Set(Array.from(list.querySelectorAll('.message-help[open]'),node=>node.dataset.message));
   const openMessages=new Set(Array.from(list.querySelectorAll('.message-record[open]'),node=>node.dataset.message));
-  const openAircraft=new Set(Array.from(list.querySelectorAll('.aircraft-record[open]'),node=>node.dataset.aircraft));
+  const openAircraftRecords=Array.from(list.querySelectorAll('.aircraft-record[open]'));
+  const openAircraft=new Set(openAircraftRecords.map(node=>node.dataset.aircraft));
+  const openAircraftCards=new Map(openAircraftRecords.map(node=>[node.dataset.aircraft,node.querySelector('.aircraft-card')])
+    .filter(([,card])=>card));
   if (!items.length) {
     const empty = document.createElement('div');
     empty.className = 'empty';
@@ -1360,14 +1383,14 @@ function rows(items, kind, emptyText, list = $('activity'), limit = 24) {
       kind === 'message' ? 'Listening for decoded messages…' : 'Waiting for receiver measurements.');
     content.append(empty);
   }
-  for (const item of items.slice(0,limit)) {
+  for (const item of kind==='aircraft'?items:items.slice(0,limit)) {
     const row = $('thing').content.cloneNode(true);
     row.querySelector('.item-icon').innerHTML = icon(kind);
     row.querySelector('strong').textContent = item.title || 'Received signal';
     row.querySelector('small').textContent = item.tag || '';
     row.querySelector('.item-detail').textContent = item.detail || '';
     if (kind==='aircraft') {
-      content.append(aircraftRecord(item,row,openAircraft));
+      content.append(aircraftRecord(item,row,openAircraft,openAircraftCards));
       continue;
     }
     if (kind==='message') {
@@ -1377,6 +1400,46 @@ function rows(items, kind, emptyText, list = $('activity'), limit = 24) {
     content.append(row);
   }
   list.replaceChildren(content);
+  paintAircraftSelection();
+}
+
+function wireAircraftSelection(record,summary,item,origin) {
+  rememberAircraftIdentity(item);
+  selectionRecords.set(record,item);
+  summary.addEventListener('click',()=>selectAircraft(item,{origin,reveal:true}));
+  paintAircraftSelectionRecord(record);
+}
+
+function paintAircraftSelectionRecord(record) {
+  const item=selectionRecords.get(record);
+  if(!item)return false;
+  const identity=resolveAircraftIdentity(item);
+  record.dataset.aircraftHex=identity?.hex||'';
+  const active=matchesAircraft(item);
+  record.classList.toggle('aircraft-selected',active);
+  record.querySelector(':scope > summary')?.setAttribute('aria-current',String(active));
+  return active;
+}
+
+function paintAircraftSelection(event={}) {
+  const revealed=new Set();
+  let scrolled=false;
+  for(const record of document.querySelectorAll('.aircraft-record,.message-record')){
+    if(!paintAircraftSelectionRecord(record)||!event.reveal)continue;
+    const aircraft=record.classList.contains('aircraft-record');
+    if((aircraft&&event.origin==='list')||(!aircraft&&event.origin==='message'))continue;
+    const list=record.parentElement;
+    if(revealed.has(list)||!record.getClientRects().length)continue;
+    revealed.add(list);
+    record.open=true;
+    if(!scrolled){record.scrollIntoView({block:'nearest',inline:'nearest'});scrolled=true;}
+  }
+  for(const group of document.querySelectorAll('#radar .radar-aircraft')){
+    const identity={hex:group.dataset.aircraftHex,callsign:group.dataset.aircraftCallsign};
+    const active=matchesAircraft(identity);
+    group.classList.toggle('aircraft-selected',active);
+    group.setAttribute('aria-pressed',String(active));
+  }
 }
 
 function drawMessages() {
@@ -1412,7 +1475,7 @@ async function refreshMessages() {
   drawMessages();
 }
 $('history-search').addEventListener('input',drawMessages);
-function radar(items, accessibleLabel = 'Relative positions of aircraft received by your antenna') {
+function radar(items, accessibleLabel = 'Relative positions of aircraft received by your antenna', target=$('radar')) {
   const NS = 'http://www.w3.org/2000/svg';
   const make = (tag, attrs, label) => {
     const node = document.createElementNS(NS, tag);
@@ -1420,7 +1483,7 @@ function radar(items, accessibleLabel = 'Relative positions of aircraft received
     if (label) node.textContent = label;
     return node;
   };
-  const svg = make('svg', {viewBox:'0 0 620 370',role:'img','aria-label':accessibleLabel});
+  const svg = make('svg', {viewBox:'0 0 620 370',role:'group','aria-label':accessibleLabel});
   const cx = 310, cy = 183, radius = 139;
   const aircraftScale=(Number.isFinite(aircraftAppearance.size)?aircraftAppearance.size:defaultAircraftAppearance.size)/28;
   const farthest = Math.max(0, ...items.map(item => Number.isFinite(item.distanceKm) ? item.distanceKm : 0));
@@ -1442,7 +1505,19 @@ function radar(items, accessibleLabel = 'Relative positions of aircraft received
     const r = item.distanceKm / limit * radius;
     const x = cx + Math.sin(a) * r;
     const y = cy - Math.cos(a) * r;
-    const group = make('g',{class:'radar-aircraft',transform:'translate('+x+' '+y+')'});
+    rememberAircraftIdentity(item);
+    const selected=matchesAircraft(item);
+    const identity=aircraftIdentity(item);
+    const group = make('g',{class:'radar-aircraft'+(selected?' aircraft-selected':''),
+      transform:'translate('+x+' '+y+')',role:'button',tabindex:'0','aria-pressed':String(selected),
+      'aria-label':`Select ${item.title || identity?.hex || 'aircraft'}`,
+      'data-aircraft-hex':identity?.hex||'','data-aircraft-callsign':identity?.callsign||''});
+    group.addEventListener('click',()=>selectAircraft(item,{origin:'radar',reveal:true}));
+    group.addEventListener('keydown',event=>{
+      if(event.key!=='Enter'&&event.key!==' ')return;
+      event.preventDefault();event.stopPropagation();
+      selectAircraft(item,{origin:'radar',reveal:true});
+    });
     group.append(make('title',{},item.title+' · '+distance(item.distanceKm)));
     group.append(make('path',{d:aircraftOutline,fill:'var(--aircraft-colour)',stroke:'var(--aircraft-outline)',
       'stroke-width':'1.5','paint-order':'stroke fill','vector-effect':'non-scaling-stroke',
@@ -1455,7 +1530,8 @@ function radar(items, accessibleLabel = 'Relative positions of aircraft received
     }
     svg.append(group);
   }
-  $('radar').replaceChildren(svg);
+  target?.replaceChildren(svg);
+  return svg;
 }
 
 const sampleTowerCentre = {latitude:0, longitude:0};
@@ -1466,6 +1542,7 @@ const sampleTowerAircraft = sample('adsb').aircraft.map((item,index) => {
 });
 
 function drawTowerTraffic(demo) {
+  detachedAircraftContext='tower';
   const centre=demo ? sampleTowerCentre : towerAircraft?.centre ?? localArea?.aircraftCentre;
   const items=demo ? sampleTowerAircraft : towerAircraft?.aircraft ?? [];
   const status=towerAircraft?.status;
@@ -1495,9 +1572,11 @@ function drawTowerTraffic(demo) {
   if (centre && map) void showTowerMap(centre,items);
   if (centre && !map) radar(items,'Relative aircraft positions around the Tower map centre');
   rows(items,'aircraft',status==='live' ? 'No recent aircraft positions in this area.' : feedback);
+  syncDetachedAircraft();
 }
 
 function drawLocalAircraft(next,demo) {
+  detachedAircraftContext='local';
   const items=demo ? sampleTowerAircraft : next.aircraft ?? [];
   const firstPosition=items.find(item=>Number.isFinite(item.lat)&&Number.isFinite(item.lon));
   if(!localArea?.aircraftCentre&&!localAircraftFallbackCentre&&firstPosition) {
@@ -1524,6 +1603,43 @@ function drawLocalAircraft(next,demo) {
   empty.textContent='Set the map centre in Setup or wait for a local aircraft position.';
   if(map&&centre)void showTowerMap(centre,items);
   if(!map)radar(items,'Relative positions decoded by your antenna');
+  syncDetachedAircraft();
+}
+
+function syncDetachedAircraft() {
+  if(!detachedPanels?.hasOpenPanels('aircraft'))return;
+  const demo=mode==='demo';
+  const local=sourceById(state.source)?.kind==='aircraft'||currentMode()==='adsb';
+  if(view==='tower')detachedAircraftContext='tower';
+  else if(view==='signals'&&local)detachedAircraftContext='local';
+  const tower=detachedAircraftContext==='tower';
+  const active=!closed&&(demo||(tower?towerAircraft?.status==='live':local&&state.connected&&state.running));
+  const items=demo?sampleTowerAircraft:tower?(towerAircraft?.aircraft??[]):active?(state.aircraft??[]):[];
+  const first=items.find(item=>Number.isFinite(item.lat)&&Number.isFinite(item.lon));
+  if(!tower&&!localArea?.aircraftCentre&&!localAircraftFallbackCentre&&first){
+    localAircraftFallbackCentre={latitude:first.lat,longitude:first.lon};
+  }
+  const centre=demo?sampleTowerCentre:tower?(towerAircraft?.centre??localArea?.aircraftCentre):
+    localArea?.aircraftCentre??localAircraftFallbackCentre;
+  const display=tower?towerDisplay:localAircraftDisplay;
+  const status=active?'':tower?'Waiting for the aircraft network feed.':'Select ADS-B in Open Air to resume local aircraft.';
+  detachedPanels.updateAircraft({items,centre,display,active,status,
+    selectedAircraft:selectedAircraft(),
+    title:tower?'Aircraft '+(display==='map'?'map':'radar'):'Local aircraft '+(display==='map'?'map':'radar'),
+    caption:tower?(localArea?.name||'Local area'):'Positions decoded by your antenna',
+    tag:demo?'SAMPLE':tower?'LIVE NETWORK':'LOCAL RF',appearance:aircraftAppearance,
+    radarSvg:radar(items,tower?'Network aircraft around the map centre':'Aircraft decoded by your antenna',null).outerHTML,
+    updated:Date.now()});
+}
+
+function syncDetachedWaterfall() {
+  if(!detachedPanels?.hasOpenPanels('waterfall'))return;
+  const active=mode==='live'&&!closed&&state.connected&&state.running&&Boolean(lastWaterfallPaintAt)&&
+    Date.now()-lastWaterfallPaintAt<10000;
+  detachedPanels.updateWaterfall({canvas:waterfallCanvas,title:'Waterfall',
+    caption:$('waterfall-frequency').textContent,active,
+    status:active?'Live receiver samples':$('waterfall-empty').textContent||'Waiting for receiver samples',
+    updated:lastWaterfallPaintAt});
 }
 
 function spectrum(data) {
@@ -1589,6 +1705,8 @@ function spectrum(data) {
 function render(next) {
   const previous = state;
   state = next;
+  syncDetachedAircraft();
+  syncDetachedWaterfall();
   if(next.profile?.revision && next.profile.revision!==localArea?.revision)void loadLocalArea();
   if (!scanActionPending) updateScanState(next);
   const source = sourceById(next.source);
@@ -1779,7 +1897,7 @@ async function loadCapabilities() {
 }
 
 async function refresh() {
-  if (closed || busy || mode !== 'live' || refreshing || document.hidden) return;
+  if (closed || busy || mode !== 'live' || refreshing || (document.hidden&&!detachedPanels?.hasOpenPanels())) return;
   refreshing=true;
   const generation = clockGeneration;
   try {
@@ -1793,6 +1911,25 @@ async function refresh() {
   } finally { refreshing=false; }
 }
 document.addEventListener('visibilitychange', () => { syncStreams(); void refresh(); void refreshAircraft(); void refreshMessages(); });
+detachedPanels=initialiseDetachedPanels({
+  onAircraftSelect(identity){selectAircraft(identity,{origin:'detached-plane',reveal:true});},
+  onAircraftView(display){
+    if(detachedAircraftContext==='tower'){
+      towerDisplay=display;saveAircraftDisplay(towerDisplayKey,display);
+      if(view==='tower')drawTowerTraffic(mode==='demo');
+      else syncDetachedAircraft();
+    }else{
+      localAircraftDisplay=display;saveAircraftDisplay(localAircraftDisplayKey,display);
+      if(view==='signals')drawLocalAircraft(state,mode==='demo');
+      else syncDetachedAircraft();
+    }
+  },
+  onPanelsChanged(){queueMicrotask(()=>{
+    syncStreams();syncDetachedAircraft();syncDetachedWaterfall();
+    void refresh();void refreshAircraft();
+  });}
+});
+subscribeAircraftSelection(event=>{paintAircraftSelection(event);syncDetachedAircraft();});
 showView(readRoute());
 void loadCapabilities();
 setInterval(refresh,2300);

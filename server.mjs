@@ -7,6 +7,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createAccess } from './access.mjs';
 import { aircraftGeometry, createAircraftNetwork } from './aircraft-network.mjs';
+import { createAircraftInfo, normaliseAircraftIdentity } from './aircraft-info.mjs';
 import { createCbScanner, createVoiceScanner } from './cb-scan.mjs';
 import { createLocalProfileStore } from './local-profile.mjs';
 import { createMessageArchive, messageLimit } from './message-archive.mjs';
@@ -144,11 +145,12 @@ function aircraftPosition(record, station) {
     (lat===0&&lon===0))return null;
   const registration=aircraftText(a.registration,12);
   const aircraftType=aircraftText(a.aircraftType??a.type,12);
-  const title=aircraftText(a.callsign,12)||registration||hex.toUpperCase();
+  const callsign=aircraftText(a.callsign,12);
+  const title=callsign||registration||hex.toUpperCase();
   const alt=a.altitude;
   const heading=finite(a.track)?a.track:finite(a.heading)?a.heading:record.heading;
   const relative=aircraftGeometry(station,lat,lon);
-  Object.assign(relative,{source:'Local receiver',registration,aircraftType,
+  Object.assign(relative,{source:'Local receiver',callsign,registration,aircraftType,
     category:aircraftText(a.emitterCategory??a.category),onSurface:typeof a.onSurface==='boolean'?a.onSurface:undefined,
     altGeom:finite(a.geometricAltitude)?a.geometricAltitude:finite(a.altGeom)?a.altGeom:undefined,
     navigationHeading:finite(a.navigationHeading)?a.navigationHeading:undefined,
@@ -187,11 +189,12 @@ function localAircraftTrack(aircraftState, station) {
   if(!/^[0-9a-f]{6}$/.test(hex))return null;
   const registration=aircraftText(a.registration,12);
   const aircraftType=aircraftText(a.aircraftType??a.type,12);
-  const title=aircraftText(a.callsign,12)||registration||hex.toUpperCase();
+  const callsign=aircraftText(a.callsign,12);
+  const title=callsign||registration||hex.toUpperCase();
   const alt=finite(a.altitude)?a.altitude:undefined;
   const heading=finite(a.track)?a.track:finite(a.heading)?a.heading:undefined;
   return {hex,title,tag:'NO POSITION',detail:[aircraftType,finite(alt)?alt.toLocaleString('en-AU')+' ft':null,
-    'Waiting for position frames'].filter(Boolean).join(' · '),source:'Local receiver',registration,aircraftType,
+    'Waiting for position frames'].filter(Boolean).join(' · '),source:'Local receiver',callsign,registration,aircraftType,
     category:aircraftText(a.emitterCategory??a.category),onSurface:typeof a.onSurface==='boolean'?a.onSurface:undefined,alt,heading,
     altGeom:finite(a.geometricAltitude)?a.geometricAltitude:finite(a.altGeom)?a.altGeom:undefined,
     navigationHeading:finite(a.navigationHeading)?a.navigationHeading:undefined,
@@ -575,7 +578,11 @@ const assets=new Map([
   ['/','index.html'],['/style.css','style.css'],['/app.js','app.js'],['/sources.mjs','sources.mjs'],
   ['/cb-panel.mjs','cb-panel.mjs'],['/cb-panel.css','cb-panel.css'],['/signal-meter.mjs','signal-meter.mjs'],
   ['/local-setup.mjs','local-setup.mjs'],['/tower-map.mjs','tower-map.mjs'],['/message-help.mjs','message-help.mjs'],
-  ['/detail-fields.mjs','detail-fields.mjs'],['/aircraft-appearance.mjs','aircraft-appearance.mjs']
+  ['/detail-fields.mjs','detail-fields.mjs'],['/aircraft-appearance.mjs','aircraft-appearance.mjs'],
+  ['/aircraft-card.mjs','aircraft-card.mjs'],['/aircraft-card.css','aircraft-card.css'],
+  ['/aircraft-screen.mjs','aircraft-screen.mjs'],['/aircraft-screen.css','aircraft-screen.css'],
+  ['/aircraft-selection.mjs','aircraft-selection.mjs'],['/detached-panel.html','detached-panel.html'],
+  ['/detached-panel.mjs','detached-panel.mjs'],['/detached-panels.mjs','detached-panels.mjs'],['/detached-panel.css','detached-panel.css']
 ]);
 const contentTypes={html:'text/html',css:'text/css',js:'application/javascript',mjs:'application/javascript'};
 
@@ -610,7 +617,7 @@ function send(res,status,body,type='application/json'){
   res.writeHead(status,{'Content-Type':type+'; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff',
     'Content-Security-Policy':"default-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; " +
       "script-src 'self' https://unpkg.com/leaflet@1.9.4/dist/; style-src 'self' https://unpkg.com/leaflet@1.9.4/dist/; " +
-      "img-src 'self' data: https://tile.openstreetmap.org https://unpkg.com/leaflet@1.9.4/dist/"});
+      "img-src 'self' data: https://tile.openstreetmap.org https://t.plnspttrs.net https://unpkg.com/leaflet@1.9.4/dist/"});
   res.end(type==='application/json'?JSON.stringify(body):body);
 }
 
@@ -643,6 +650,7 @@ export function appServer(receiver, port=8877, options={}){
   const allowedOrigins = new Set([localOrigin, publicOrigin?.origin].filter(Boolean));
   const access=createAccess(options.access);
   const networkAircraft=createAircraftNetwork({request:options.aircraftRequest,apiKey:options.aircraftApiKey});
+  const aircraftInfo=createAircraftInfo({request:options.aircraftInfoRequest});
   const profileStore=options.profileStore??createLocalProfileStore();
   let area, areaRevision, readingArea;
   function useProfile(profile){
@@ -816,6 +824,17 @@ export function appServer(receiver, port=8877, options={}){
         }
         const profile=await getProfile();
         return send(res,200,await networkAircraft(profile.aircraftCentre));
+      }
+      if(req.method==='GET'&&path==='/api/aircraft-info'){
+        if(req.headers['sec-fetch-site']==='cross-site'||(req.headers.origin&&!allowedOrigins.has(req.headers.origin))){
+          return send(res,403,{error:'Open the aircraft details in Open Air.'});
+        }
+        const query=new URL(req.url,localOrigin).searchParams;
+        if(query.getAll('hex').length!==1||query.getAll('callsign').length>1){
+          return send(res,400,{error:'Specify one aircraft address and callsign.'});
+        }
+        const identity=normaliseAircraftIdentity({hex:query.get('hex'),callsign:query.get('callsign')??''});
+        return send(res,200,await aircraftInfo(identity));
       }
       if(req.method==='GET'&&path==='/aircraft.json'){
         const state=await snapshot();

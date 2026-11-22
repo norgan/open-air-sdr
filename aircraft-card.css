@@ -1,0 +1,25 @@
+.aircraft-card{min-width:0}
+.aircraft-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:10px;margin:0}
+.aircraft-fields div{min-width:0}
+.aircraft-fields dt{color:var(--weak);font:10px var(--mono);letter-spacing:.45px;text-transform:uppercase}
+.aircraft-fields dd{margin:4px 0 0;color:var(--text);font-size:12px;overflow-wrap:anywhere}
+.aircraft-profile{display:grid;gap:10px;margin:0 0 12px;padding:0 0 12px;border-bottom:1px solid var(--line)}
+.aircraft-profile-identity{display:flex;min-width:0;flex-direction:column;align-items:flex-start;gap:3px}
+.aircraft-profile-airline{margin:0;color:var(--accent2);font-size:13px;font-weight:700;overflow-wrap:anywhere}
+.aircraft-profile-flight{display:block;color:var(--text);font-size:clamp(20px,3vw,28px);line-height:1.05;letter-spacing:-.04em;overflow-wrap:anywhere}
+.aircraft-profile-callsign,.aircraft-profile-airframe{color:var(--muted);font-size:11px;line-height:1.4;overflow-wrap:anywhere}
+.aircraft-profile-source{color:var(--weak);font:9px var(--mono);text-transform:uppercase;letter-spacing:.35px}
+.aircraft-profile-status{margin:0;padding:7px 9px;border-left:2px solid var(--accent2);border-radius:3px;background:var(--bg);color:var(--muted);font-size:11px;line-height:1.4}
+.aircraft-photo-frame{min-width:0;margin:0;border:1px solid var(--line);border-radius:7px;overflow:hidden;background:var(--bg)}
+.aircraft-photo-link{display:block;color:inherit}
+.aircraft-photo{display:block;width:100%;height:auto;max-height:220px;aspect-ratio:16/9;object-fit:cover;background:#0d1116}
+.aircraft-photo-fallback{display:grid;min-height:108px;place-items:center;padding:18px;color:var(--weak);font-size:11px;text-align:center}
+.aircraft-photo-attribution{padding:6px 8px;color:var(--weak);font:9px/1.4 var(--mono);overflow-wrap:anywhere}
+.aircraft-photo-attribution a{color:var(--accent2)}
+.aircraft-profile+.aircraft-fields{margin-top:0}
+:is(#tower-map,#detached-map) .leaflet-popup-content-wrapper,:is(#tower-map,#detached-map) .leaflet-popup-tip{background:var(--paper);color:var(--text)}
+:is(#tower-map,#detached-map) .leaflet-popup-content{width:min(340px,calc(100vw - 90px))!important;max-height:min(68vh,560px);margin:12px;overflow:auto}
+:is(#tower-map,#detached-map) .leaflet-popup-close-button{color:var(--text)}
+:is(#tower-map,#detached-map) .aircraft-card{width:100%}
+:is(#tower-map,#detached-map) .aircraft-fields{grid-template-columns:repeat(2,minmax(0,1fr))}
+@media(max-width:600px){.aircraft-fields{grid-template-columns:1fr 1fr}}

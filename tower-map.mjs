@@ -1,3 +1,5 @@
+import { rememberAircraftIdentity, selectAircraft, matchesAircraft, subscribeAircraftSelection } from './aircraft-selection.mjs';
+
 const leafletUrl = 'https://unpkg.com/leaflet@1.9.4/dist/';
 const tilesUrl = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 const svgNamespace = 'http://www.w3.org/2000/svg';
@@ -35,12 +37,22 @@ function getLeaflet() {
   return leafletLoader;
 }
 
-export function createTowerMap(container, status) {
+export function createTowerMap(container, status, {createCard,updateCard} = {}) {
   let map;
   let centreKey;
   let lastAircraft;
   let rendered;
   const markers = new Map();
+  function paintSelection() {
+    for(const marker of markers.values()){
+      const active=matchesAircraft(marker.item);
+      const element=marker.pin.getElement?.();
+      element?.classList?.toggle('aircraft-selected',active);
+      element?.setAttribute?.('aria-pressed',String(active));
+      element?.setAttribute?.('data-aircraft-hex',String(marker.item.hex||'').toLowerCase());
+    }
+  }
+  subscribeAircraftSelection(paintSelection);
 
   return async function show(centre, aircraft) {
     if (container.hidden || !centre) return;
@@ -51,7 +63,7 @@ export function createTowerMap(container, status) {
       const leaflet = await getLeaflet();
       if (container.hidden || rendered !== aircraft) return;
       if (!map) {
-        map = leaflet.map(container, {minZoom:3, maxZoom:19, scrollWheelZoom:false});
+        map = leaflet.map(container, {minZoom:3, maxZoom:19, scrollWheelZoom:true});
         const tiles = leaflet.tileLayer(tilesUrl, {
           maxZoom:19,
           attribution:'© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
@@ -76,6 +88,7 @@ export function createTowerMap(container, status) {
       lastAircraft = aircraft;
       const present = new Set();
       for (const item of aircraft) {
+        rememberAircraftIdentity(item);
         present.add(item.hex);
         const coordinates = [item.lat, item.lon];
         const label = document.createElement('span');
@@ -92,11 +105,22 @@ export function createTowerMap(container, status) {
           const pin = leaflet.marker(coordinates, {
             icon:leaflet.divIcon({className:'tower-aircraft-marker',html:icon,iconSize:[28,28]}),
             title:item.title, alt:item.title,
-          }).bindPopup(label).addTo(map);
-          marker = {pin, shape};
+          }).bindPopup(label,{maxWidth:380,minWidth:230}).addTo(map);
+          marker = {pin, shape, item, card:null};
+          const current=marker;
+          pin.on?.('popupopen',()=>{
+            if(!createCard)return;
+            current.card=createCard(current.item);
+            pin.setPopupContent(current.card);
+          });
+          pin.on?.('popupclose',()=>{current.card=null;});
+          pin.on?.('click',()=>selectAircraft(current.item,{origin:'map',reveal:true}));
           markers.set(item.hex,marker);
         } else {
-          marker.pin.setLatLng(coordinates).setPopupContent(label);
+          marker.item=item;
+          marker.pin.setLatLng(coordinates);
+          if(marker.card&&marker.pin.isPopupOpen?.())updateCard?.(marker.card,item);
+          else marker.pin.setPopupContent(label);
         }
         marker.shape.setAttribute('transform', `rotate(${item.heading ?? 0})`);
       }
@@ -106,6 +130,7 @@ export function createTowerMap(container, status) {
           markers.delete(hex);
         }
       }
+      paintSelection();
     } catch {
       if (container.hidden) return;
       status.textContent = 'The geographic map could not load. Switch to Radar to see relative positions.';
