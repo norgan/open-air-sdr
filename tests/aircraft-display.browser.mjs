@@ -471,7 +471,7 @@ try{
     return marker&&getComputedStyle(marker).width==='44px';
   });
   const styles=await page.evaluate(()=>{
-    const marker=document.querySelector('#tower-map .tower-aircraft-marker');
+    const marker=document.querySelector('#tower-map .tower-aircraft-marker:not(.aircraft-selected)');
     const path=marker.querySelector('path');
     const tilePane=document.querySelector('#tower-map .leaflet-tile-pane');
     const credit=document.querySelector('#tower-map .leaflet-control-attribution');
