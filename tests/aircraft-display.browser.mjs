@@ -39,9 +39,9 @@ const localAircraft=[
 const pendingAircraft={hex:'abc125',title:'AWAITING',tag:'NO POSITION',
   detail:'1,500 ft · Waiting for position frames',source:'Local receiver',altitude:1500};
 const networkAircraft=[
-  {hex:'def123',title:'NETWORK1',tag:'A359',detail:'5,000 ft',source:'adsb.lol',
+  {hex:'def123',title:'QTR69K',callsign:'QTR69K',tag:'A359',detail:'5,000 ft',source:'adsb.lol',
     lat:51.51,lon:-0.10,altitude:5000,heading:45,distanceKm:2,bearing:45},
-  {hex:'def124',title:'NETWORK2',tag:'B788',detail:'7,000 ft',source:'adsb.lol',
+  {hex:'def124',title:'VOZ832',callsign:'VOZ832',tag:'B788',detail:'7,000 ft',source:'adsb.lol',
     lat:51.48,lon:-0.14,altitude:7000,heading:170,distanceKm:3,bearing:190},
 ];
 const centre={latitude:51.5,longitude:-0.12};
@@ -490,16 +490,21 @@ try{
   await page.locator('#nav-tower').click();
   await waitVisible('#tower-show-radar');
   await countMarkers(2);
-  await page.waitForFunction(()=>document.querySelector('#tower-map .tower-aircraft-marker')?.title==='NETWORK1');
-  assert.deepEqual(await markerTitles(),['NETWORK1','NETWORK2']);
+  await page.waitForFunction(()=>document.querySelector('#tower-map .tower-aircraft-marker')?.title==='Qatari 69K');
+  const radioLabels=['Qatari 69K','Velocity 832'];
+  assert.deepEqual(await markerTitles(),radioLabels);
+  assert.deepEqual((await page.locator('#tower-map .aircraft-map-label').allTextContents()).sort(),radioLabels);
+  const velocity=recordFor('Velocity 832');
+  assert.match(await velocity.locator('summary').innerText(),/Velocity 832[\s\S]*VOZ832/);
   await page.locator('#tower-show-radar').click();
   await waitVisible('#radar');
+  await page.getByRole('button',{name:'Select Velocity 832'}).waitFor();
   assert.equal(await page.locator('#tower-map').isVisible(),false);
   await enterAircraftFullscreen();
   assert.equal(await page.locator('#aircraft-screen-radar').getAttribute('aria-pressed'),'true');
   await page.locator('#aircraft-screen-map').click();
   await waitVisible('#tower-map');
-  assert.deepEqual(await markerTitles(),['NETWORK1','NETWORK2']);
+  assert.deepEqual(await markerTitles(),radioLabels);
   await page.locator('#aircraft-screen-radar').click();
   await waitVisible('#radar');
   await exitAircraftFullscreen();

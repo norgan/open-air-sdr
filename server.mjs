@@ -8,6 +8,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createAccess } from './access.mjs';
 import { aircraftGeometry, createAircraftNetwork } from './aircraft-network.mjs';
 import { createAircraftInfo, normaliseAircraftIdentity } from './aircraft-info.mjs';
+import { createCallsignLabels } from './aircraft-callsign.mjs';
 import { createCbScanner, createVoiceScanner } from './cb-scan.mjs';
 import { createLocalProfileStore } from './local-profile.mjs';
 import { createMessageArchive, messageLimit } from './message-archive.mjs';
@@ -580,6 +581,7 @@ const assets=new Map([
   ['/local-setup.mjs','local-setup.mjs'],['/tower-map.mjs','tower-map.mjs'],['/message-help.mjs','message-help.mjs'],
   ['/detail-fields.mjs','detail-fields.mjs'],['/aircraft-appearance.mjs','aircraft-appearance.mjs'],
   ['/aircraft-card.mjs','aircraft-card.mjs'],['/aircraft-card.css','aircraft-card.css'],
+  ['/aircraft-callsign.mjs','aircraft-callsign.mjs'],
   ['/aircraft-screen.mjs','aircraft-screen.mjs'],['/aircraft-screen.css','aircraft-screen.css'],
   ['/aircraft-selection.mjs','aircraft-selection.mjs'],['/detached-panel.html','detached-panel.html'],
   ['/detached-panel.mjs','detached-panel.mjs'],['/detached-panels.mjs','detached-panels.mjs'],['/detached-panel.css','detached-panel.css']
@@ -651,6 +653,7 @@ export function appServer(receiver, port=8877, options={}){
   const access=createAccess(options.access);
   const networkAircraft=createAircraftNetwork({request:options.aircraftRequest,apiKey:options.aircraftApiKey});
   const aircraftInfo=createAircraftInfo({request:options.aircraftInfoRequest});
+  const labelTracks=createCallsignLabels({request:options.aircraftInfoRequest});
   const profileStore=options.profileStore??createLocalProfileStore();
   let area, areaRevision, readingArea;
   function useProfile(profile){
@@ -803,7 +806,8 @@ export function appServer(receiver, port=8877, options={}){
         await getProfile();
         const state=await snapshot();
         seedTune(state);
-        return send(res,200,withControls(state));
+        return send(res,200,withControls({...state,aircraft:labelTracks(state.aircraft),
+          aircraftReceived:labelTracks(state.aircraftReceived)}));
       }
       if(req.method==='GET'&&path==='/api/scanners')return send(res,200,scannerStatus());
       if(req.method==='GET'&&path==='/api/messages'){
@@ -823,7 +827,8 @@ export function appServer(receiver, port=8877, options={}){
           return send(res,403,{error:'Open the Tower view in Open Air.'});
         }
         const profile=await getProfile();
-        return send(res,200,await networkAircraft(profile.aircraftCentre));
+        const report=await networkAircraft(profile.aircraftCentre);
+        return send(res,200,{...report,aircraft:labelTracks(report.aircraft)});
       }
       if(req.method==='GET'&&path==='/api/aircraft-info'){
         if(req.headers['sec-fetch-site']==='cross-site'||(req.headers.origin&&!allowedOrigins.has(req.headers.origin))){

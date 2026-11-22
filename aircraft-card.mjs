@@ -1,5 +1,6 @@
 import { aircraftDetailFields } from './detail-fields.mjs';
 import { rememberAircraftIdentity } from './aircraft-selection.mjs';
+import { radioCallsign } from './aircraft-callsign.mjs';
 
 const identityStates = new Set(['ready','partial','unavailable','not-found']);
 const aircraftInfoCache = new Map();
@@ -176,12 +177,14 @@ function renderIdentity(state,info = {}) {
   const type=[model,aircraftType && !model.toUpperCase().includes(aircraftType.toUpperCase()) ? aircraftType : '']
     .filter(Boolean).join(' · ');
   const airline=info.airline;
-  const flight=info.flightNumber || callsign || registration || hexAddress(item.hex) || 'Aircraft';
+  const radio=radioCallsign(item);
+  const flight=radio || info.flightNumber || callsign || registration || hexAddress(item.hex) || 'Aircraft';
   state.airline.textContent=airline;
   state.airline.hidden=!airline;
   state.airline.dataset.identity=info.airline ? 'airline' : '';
   state.flight.textContent=flight;
-  state.callsign.textContent=info.flightNumber && callsign ? `Callsign ${callsign}` : '';
+  state.callsign.textContent=[(radio || info.flightNumber) && callsign ? `Callsign ${callsign}` : '',
+    radio && info.flightNumber ? `Flight ${info.flightNumber}` : ''].filter(Boolean).join(' · ');
   state.callsign.hidden=!state.callsign.textContent;
   state.airframe.textContent=[registration,type].filter(Boolean).join(' · ');
   state.airframe.hidden=!state.airframe.textContent;

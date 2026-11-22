@@ -1,4 +1,10 @@
 .aircraft-card{min-width:0}
+.aircraft-map-symbol{width:100%;height:100%}
+.aircraft-map-label{position:absolute;left:calc(100% + 3px);top:50%;translate:0 -50%;padding:2px 5px;border:1px solid #6e7b89;border-radius:4px;background:#101820;color:#fff;font:600 11px/1.2 system-ui,sans-serif;white-space:nowrap;pointer-events:none;visibility:hidden}
+.aircraft-map-label[data-side="left"]{right:calc(100% + 3px);left:auto}
+.aircraft-map-label:is([data-side="left"],[data-side="right"]){visibility:visible}
+.aircraft-selected .aircraft-map-label{border-color:var(--accent,#acdba1);color:var(--accent,#acdba1)}
+.leaflet-zoom-anim .aircraft-map-label{visibility:hidden}
 .aircraft-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:10px;margin:0}
 .aircraft-fields div{min-width:0}
 .aircraft-fields dt{color:var(--weak);font:10px var(--mono);letter-spacing:.45px;text-transform:uppercase}

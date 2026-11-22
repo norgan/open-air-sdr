@@ -1,3 +1,5 @@
+import { radioCallsign } from './aircraft-callsign.mjs';
+
 function finite(value) {
   return typeof value === 'number' && Number.isFinite(value);
 }
@@ -39,6 +41,7 @@ export function aircraftDetailFields(item = {}) {
   const verticalRate = first(item,['verticalRate','baroRate']);
   const reportedAt = first(item,['reportedAt','position']);
   return [
+    field('Radio callsign', radioCallsign(item)),
     field('Callsign', callsign && callsign.toUpperCase() !== hex ? callsign : null),
     field('Airline', item.airline),
     field('Flight number', item.flightNumber),

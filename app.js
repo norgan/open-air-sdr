@@ -3,6 +3,7 @@ import { createCbPanel } from '/cb-panel.mjs';
 import { createLocalSetup } from '/local-setup.mjs';
 import { messageDetailFields, messageDetailKey } from '/detail-fields.mjs';
 import { aircraftRecordKey, createAircraftCard, updateAircraftCard } from '/aircraft-card.mjs';
+import { aircraftLabel, radioCallsign } from '/aircraft-callsign.mjs';
 import { explainMessage } from '/message-help.mjs';
 import { estimateSignal } from '/signal-meter.mjs';
 import { aircraftOutline, createTowerMap } from '/tower-map.mjs';
@@ -1287,9 +1288,10 @@ function formattedTime(value) {
 }
 function updateAircraftSummary(summary,item) {
   summary.querySelector('.item-icon').innerHTML=icon('aircraft');
-  summary.querySelector('strong').textContent=item.title || 'Received signal';
+  summary.querySelector('strong').textContent=aircraftLabel(item);
   summary.querySelector('small').textContent=item.tag || '';
-  summary.querySelector('.item-detail').textContent=item.detail || '';
+  summary.querySelector('.item-detail').textContent=[radioCallsign(item) && item.callsign,item.detail]
+    .filter(Boolean).join(' · ');
 }
 
 function updateAircraftRecord(record,item) {
@@ -1558,7 +1560,8 @@ function radar(items, accessibleLabel = 'Relative positions of aircraft received
     svg.append(make('text',{...labels,x:cx+8,y:cy-r+12,fill:'#a4b0b5'},Math.round(limit*i/4)+' km'));
   }
   svg.append(make('circle',{cx,cy,r:5,fill:'#acdba1'}),make('circle',{cx,cy,r:10,fill:'none',stroke:'#acdba1'}));
-  for (const [i,item] of items.entries()) {
+  const radioLabels=[];
+  for (const item of items) {
     if (!Number.isFinite(item.distanceKm) || !Number.isFinite(item.bearing)) continue;
     const a = item.bearing * Math.PI / 180;
     const r = item.distanceKm / limit * radius;
@@ -1567,9 +1570,10 @@ function radar(items, accessibleLabel = 'Relative positions of aircraft received
     rememberAircraftIdentity(item);
     const selected=matchesAircraft(item);
     const identity=aircraftIdentity(item);
+    const label=aircraftLabel(item);
     const group = make('g',{class:'radar-aircraft'+(selected?' aircraft-selected':''),
       transform:'translate('+x+' '+y+')',role:'button',tabindex:'0','aria-pressed':String(selected),
-      'aria-label':`Select ${item.title || identity?.hex || 'aircraft'}`,
+      'aria-label':`Select ${label}`,
       'data-aircraft-hex':identity?.hex||'','data-aircraft-callsign':identity?.callsign||''});
     group.addEventListener('click',()=>selectAircraft(item,{origin:'radar',reveal:true}));
     group.addEventListener('keydown',event=>{
@@ -1577,17 +1581,25 @@ function radar(items, accessibleLabel = 'Relative positions of aircraft received
       event.preventDefault();event.stopPropagation();
       selectAircraft(item,{origin:'radar',reveal:true});
     });
-    group.append(make('title',{},item.title+' · '+distance(item.distanceKm)));
+    group.append(make('title',{},label+' · '+distance(item.distanceKm)));
     group.append(make('path',{d:aircraftOutline,fill:'var(--aircraft-colour)',stroke:'var(--aircraft-outline)',
       'stroke-width':'1.5','paint-order':'stroke fill','vector-effect':'non-scaling-stroke',
       transform:'rotate('+(Number.isFinite(item.heading)?item.heading:0)+') scale('+aircraftScale+')'}));
-    if (i < 9) {
-      const right=x<420;
-      group.append(make('text',{...labels,fill:'var(--aircraft-colour)',stroke:'var(--aircraft-outline)',
-        'stroke-width':'.7','paint-order':'stroke fill',x:right?11:-11,y:-9,
-        'text-anchor':right?'start':'end'},String(item.title).slice(0,13)));
-    }
+    radioLabels.push({group,label,x,y,selected,onSurface:item.onSurface===true});
     svg.append(group);
+  }
+  const occupied=[];
+  radioLabels.sort((a,b)=>Number(b.selected)-Number(a.selected)||Number(a.onSurface)-Number(b.onSurface));
+  for(const {group,label,x,y} of radioLabels){
+    const width=label.length*6.7+6;
+    const right=x+11+width<620;
+    const left=right ? x+11 : x-11-width;
+    const top=y-20;
+    if(occupied.some(box=>left<box.left+box.width && left+width>box.left && Math.abs(top-box.top)<15))continue;
+    occupied.push({left,width,top});
+    group.append(make('text',{...labels,fill:'var(--aircraft-colour)',stroke:'var(--aircraft-outline)',
+      'stroke-width':'.7','paint-order':'stroke fill',x:right?11:-11,y:-9,
+      'text-anchor':right?'start':'end'},label));
   }
   target?.replaceChildren(svg);
   return svg;

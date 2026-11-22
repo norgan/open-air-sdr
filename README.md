@@ -6,6 +6,8 @@ Open Air runs an RTL-SDR receiver through headless SDRangel. From your browser y
 
 **Receiver → ADS-B** also has **Map** and **Radar** views. Both show only positions decoded by your antenna. Tracks still waiting for position frames remain in **Aircraft received**. Each page remembers its own view choice.
 
+Aircraft labels use the operator's radio designator with the broadcast suffix where available, for example **Velocity 832** for `VOZ832` and **Qatari 69K** for `QTR69K`. The list keeps the broadcast identifier under the radio name, and expanded details show the ticketed flight number separately when available. The map and radar space labels to limit overlaps. Open any aircraft for its details. When a radio designator is unknown, the display uses the received identifier or registration. Labels are derived from aircraft data and operator designators. [FAA telephony designators](https://www.faa.gov/air_traffic/publications/atpubs/cnt_html/chap3_section_3.html) · [adsbdb airline lookup](https://www.adsbdb.com/)
+
 Open **Display** above either aircraft view to change the aircraft colour, outline, size and map opacity. The shared settings update both views immediately and are saved in your browser. Map opacity changes the base tiles while keeping aircraft, labels and attribution at full strength. **Reset** restores the high-contrast defaults.
 
 Use the mouse wheel over a map to zoom. **Fullscreen** fills the display with the aircraft map or radar; press **Esc** or **Exit fullscreen** to return. **Pop out** opens the aircraft view or waterfall in a separate resizable window while the main controls stay available. Keep the main Open Air window open to supply live updates to the detached displays.

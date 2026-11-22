@@ -14,7 +14,7 @@ function selectionIdentity(value) {
 export function aircraftPanelState(input={}) {
   const items=(Array.isArray(input.items)?input.items:[]).filter(item=>item&&typeof item==='object').slice(0,1500).map(item=>({
     hex:text(item.hex,12),title:text(item.title,100),tag:text(item.tag,80),detail:text(item.detail,400),
-    callsign:text(item.callsign,12),source:text(item.source,80),registration:text(item.registration,16),
+    callsign:text(item.callsign,12),atcCallsign:text(item.atcCallsign,40),source:text(item.source,80),registration:text(item.registration,16),
     aircraftType:text(item.aircraftType,80),category:text(item.category,40),squawk:text(item.squawk,8),emergency:text(item.emergency,60),
     onSurface:typeof item.onSurface==='boolean'?item.onSurface:undefined,
     alt:finite(item.alt)?item.alt:null,altGeom:finite(item.altGeom)?item.altGeom:null,

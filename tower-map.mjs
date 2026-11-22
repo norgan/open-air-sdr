@@ -1,4 +1,5 @@
 import { rememberAircraftIdentity, selectAircraft, matchesAircraft, subscribeAircraftSelection } from './aircraft-selection.mjs';
+import { aircraftLabel } from './aircraft-callsign.mjs';
 
 const leafletUrl = 'https://unpkg.com/leaflet@1.9.4/dist/';
 const tilesUrl = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
@@ -42,8 +43,34 @@ export function createTowerMap(container, status, {createCard,updateCard} = {}) 
   let centreKey;
   let lastAircraft;
   let rendered;
+  let labelFrame;
   const markers = new Map();
   const popupMaxHeight=()=>Math.max(100,Math.floor(container.clientHeight||320)-80);
+  function layoutLabels() {
+    labelFrame=undefined;
+    if (container.hidden) return;
+    const viewport=container.getBoundingClientRect();
+    const placed=[];
+    const candidates=[...markers.values()].map(marker=>({
+      marker, pin:marker.pin.getElement()?.getBoundingClientRect(),
+      size:marker.label.getBoundingClientRect(), selected:matchesAircraft(marker.item),
+    }));
+    candidates.sort((a,b)=>Number(b.selected)-Number(a.selected) ||
+      Number(a.marker.item.onSurface===true)-Number(b.marker.item.onSurface===true));
+    for (const {marker,pin,size} of candidates) {
+      const y=pin ? (pin.top+pin.bottom-size.height)/2 : 0;
+      const lefts=pin && pin.right>viewport.left && pin.left<viewport.right
+        ? [pin.right+3,pin.left-3-size.width] : [];
+      const side=lefts.findIndex(x=>x>=viewport.left+4 && x+size.width<=viewport.right-4 &&
+        y>=viewport.top+4 && y+size.height<=viewport.bottom-4 &&
+        !placed.some(box=>x<box.x+box.w+4 && x+size.width+4>box.x && y<box.y+box.h+3 && y+size.height+3>box.y));
+      marker.label.dataset.side=side===0 ? 'right' : side===1 ? 'left' : '';
+      if (side!==-1) placed.push({x:lefts[side],y,w:size.width,h:size.height});
+    }
+  }
+  function queueLabelLayout() {
+    if (labelFrame===undefined) labelFrame=requestAnimationFrame(layoutLabels);
+  }
   function resizeMap() {
     if(container.hidden||!map)return;
     map.invalidateSize();
@@ -54,6 +81,7 @@ export function createTowerMap(container, status, {createCard,updateCard} = {}) 
       popup.options.maxHeight=maxHeight;
       if(marker.pin.isPopupOpen?.())popup.update?.();
     }
+    queueLabelLayout();
   }
   function paintSelection() {
     for(const marker of markers.values()){
@@ -62,10 +90,12 @@ export function createTowerMap(container, status, {createCard,updateCard} = {}) 
       element?.classList?.toggle('aircraft-selected',active);
       element?.setAttribute?.('aria-pressed',String(active));
       element?.setAttribute?.('data-aircraft-hex',String(marker.item.hex||'').toLowerCase());
-      const title=String(marker.item.title||marker.item.hex||'Aircraft');
+      const title=aircraftLabel(marker.item);
+      if (marker.label.textContent!==title) marker.label.textContent=title;
       element?.setAttribute?.('title',title);
       element?.setAttribute?.('aria-label',title);
     }
+    queueLabelLayout();
   }
   subscribeAircraftSelection(event=>{
     paintSelection();
@@ -88,6 +118,7 @@ export function createTowerMap(container, status, {createCard,updateCard} = {}) 
       if (container.hidden || rendered !== aircraft) return;
       if (!map) {
         map = leaflet.map(container, {minZoom:3, maxZoom:19, scrollWheelZoom:true});
+        map.on('moveend zoomend resize', queueLabelLayout);
         const tiles = leaflet.tileLayer(tilesUrl, {
           maxZoom:19,
           attribution:'© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
@@ -116,7 +147,7 @@ export function createTowerMap(container, status, {createCard,updateCard} = {}) 
         present.add(item.hex);
         const coordinates = [item.lat, item.lon];
         const label = document.createElement('span');
-        label.textContent = [item.title, item.tag, item.detail].filter(Boolean).join(' · ');
+        label.textContent = [aircraftLabel(item), item.tag, item.detail].filter(Boolean).join(' · ');
         let marker = markers.get(item.hex);
         if (!marker) {
           const icon = document.createElementNS(svgNamespace, 'svg');
@@ -126,11 +157,18 @@ export function createTowerMap(container, status, {createCard,updateCard} = {}) 
           shape.setAttribute('class', 'tower-aircraft-shape');
           shape.setAttribute('d', aircraftOutline);
           icon.append(shape);
+          const markerLabel=document.createElement('span');
+          markerLabel.className='aircraft-map-label';
+          markerLabel.setAttribute('aria-hidden','true');
+          markerLabel.textContent=aircraftLabel(item);
+          const graphic=document.createElement('div');
+          graphic.className='aircraft-map-symbol';
+          graphic.append(icon,markerLabel);
           const pin = leaflet.marker(coordinates, {
-            icon:leaflet.divIcon({className:'tower-aircraft-marker',html:icon,iconSize:[28,28]}),
-            title:item.title, alt:item.title,
+            icon:leaflet.divIcon({className:'tower-aircraft-marker',html:graphic,iconSize:[28,28]}),
+            title:aircraftLabel(item), alt:aircraftLabel(item),
           }).bindPopup(label,{maxWidth:380,minWidth:230,maxHeight:popupMaxHeight()}).addTo(map);
-          marker = {pin, shape, item, card:null};
+          marker = {pin, shape, label:markerLabel, item, card:null};
           const current=marker;
           pin.on?.('popupopen',()=>{
             if(!createCard)return;

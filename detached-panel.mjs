@@ -2,6 +2,7 @@ import {createTowerMap} from './tower-map.mjs';
 import {applyAircraftAppearance} from './aircraft-appearance.mjs';
 import {createAircraftCard,updateAircraftCard} from './aircraft-card.mjs';
 import {matchesAircraft,selectAircraft,subscribeAircraftSelection} from './aircraft-selection.mjs';
+import {aircraftLabel} from './aircraft-callsign.mjs';
 
 const channel='open-air-detached-panel';
 const svgNamespace='http://www.w3.org/2000/svg';
@@ -126,7 +127,7 @@ export function initialiseDetachedPanel({document:doc=globalThis.document,window
           const wired=radarItems.has(group);
           radarItems.set(group,item);
           group.setAttribute('role','button');group.setAttribute('tabindex','0');
-          group.setAttribute('aria-label','Aircraft details for '+(item.title||item.hex));
+          group.setAttribute('aria-label','Aircraft details for '+aircraftLabel(item));
           group.style.cursor='pointer';
           if(!wired){
             group.addEventListener('click',()=>showRadarCard(radarItems.get(group)));
