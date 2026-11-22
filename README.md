@@ -4,6 +4,10 @@ Open Air runs an RTL-SDR receiver through headless SDRangel. From your browser y
 
 **Tower** brings AM airband audio and live aircraft positions together. Select a channel or scan the area's AM airband presets. The scan holds on open squelch, then resumes after 1.5 seconds of silence. Switch between **Map** and **Radar** while listening. The receiver handles audio and adsb.lol supplies the positions independently. Open an aircraft row for its ICAO address, type, position, altitude, speed and other available fields. The map uses OpenStreetMap. [Aircraft data and API limits](https://www.adsb.lol/docs/open-data/api) · [Map attribution](https://www.openstreetmap.org/copyright)
 
+**Receiver → ADS-B** also has **Map** and **Radar** views. Both show only positions decoded by your antenna. Tracks still waiting for position frames remain in **Aircraft received**. Each page remembers its own view choice.
+
+Open **Display** above either aircraft view to change the aircraft colour, outline, size and map opacity. The shared settings update both views immediately and are saved in your browser. Map opacity changes the base tiles while keeping aircraft, labels and attribution at full strength. **Reset** restores the high-contrast defaults.
+
 One tuner cannot stay on airband voice and 1090 MHz simultaneously. Tower uses network positions for that reason. Receiving both ATC and ADS-B locally at the same time requires a second receiver.
 
 **Messages** keeps the latest 500 decoded ACARS and VDL Mode 2 messages on your receiver server. Open a message to inspect its metadata, complete decoded payload, raw frame and **Meaning** notes for recognised labels, positions, airport codes and system identifiers. [ACARS application formats](https://github.com/szpajder/libacars/blob/master/doc/PROG_GUIDE.md) · [Message labels](https://github.com/brmlab/acarsdec/blob/master/datasets/acars_mls.txt)

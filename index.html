@@ -4,6 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#101318">
+  <meta name="color-scheme" content="dark">
+  <!-- The app supplies its own dark palette and user-selected aircraft colours. -->
+  <meta name="darkreader-lock">
   <title>Open Air</title>
   <link rel="stylesheet" href="/style.css">
   <link rel="stylesheet" href="/cb-panel.css">
@@ -249,7 +252,26 @@
     <section class="metrics" id="metrics" aria-label="Reception measurements"></section>
     <div class="pane-grid">
       <section class="panel stage" aria-labelledby="stage-title">
-        <div class="panel-top"><div><h2 id="stage-title">Receiver activity</h2><p id="stage-caption">Latest measurements</p></div><span id="stage-tag" class="tag">LOCAL</span></div>
+        <div class="panel-top">
+          <div>
+            <h2 id="stage-title">Receiver activity</h2><p id="stage-caption">Latest measurements</p>
+            <div id="local-aircraft-layout" class="tower-layout" role="group" aria-label="Local aircraft display" hidden>
+              <button class="control" id="local-show-map" type="button" aria-pressed="false">Map</button>
+              <button class="control" id="local-show-radar" type="button" aria-pressed="true">Radar</button>
+            </div>
+          </div>
+          <details id="aircraft-display-settings" class="aircraft-display-settings" hidden>
+            <summary>Display</summary>
+            <div class="aircraft-display-controls">
+              <label class="aircraft-display-control" for="aircraft-colour"><span>Aircraft colour</span><input id="aircraft-colour" type="color"></label>
+              <label class="aircraft-display-control" for="aircraft-outline"><span>Aircraft outline</span><input id="aircraft-outline" type="color"></label>
+              <label class="aircraft-display-control" for="aircraft-size"><span>Aircraft size</span><input id="aircraft-size" type="range" min="18" max="44" step="2"><output id="aircraft-size-value" class="aircraft-display-output" for="aircraft-size"></output></label>
+              <label class="aircraft-display-control" for="map-opacity"><span>Map opacity</span><input id="map-opacity" type="range" min="30" max="100" step="5"><output id="map-opacity-value" class="aircraft-display-output" for="map-opacity"></output></label>
+              <button id="aircraft-style-reset" class="control" type="button">Reset</button>
+            </div>
+          </details>
+          <span id="stage-tag" class="tag">LOCAL</span>
+        </div>
         <div id="stage-content" class="stage-content">
           <canvas id="scope" role="img" aria-label="Received radio power across the tuned bandwidth"></canvas>
           <div id="radar" hidden></div>
@@ -265,7 +287,7 @@
         </section>
       </section>
       <section class="panel activity" aria-labelledby="activity-title">
-        <div class="panel-top"><div><h2 id="activity-title">What's coming in</h2><p id="activity-caption">Decoded by your receiver</p></div><a id="tower-aircraft-credit" class="tag" href="https://www.adsb.lol/docs/open-data/api" target="_blank" rel="noopener" hidden>adsb.lol</a></div>
+        <div class="panel-top"><div><h2 id="activity-title">What's coming in</h2><p id="activity-caption">Decoded by your receiver</p></div><span id="local-aircraft-credit" class="tag" hidden>LOCAL RF</span><a id="tower-aircraft-credit" class="tag" href="https://www.adsb.lol/docs/open-data/api" target="_blank" rel="noopener" hidden>adsb.lol</a></div>
         <div id="activity" class="activity-list"></div>
       </section>
     </div>

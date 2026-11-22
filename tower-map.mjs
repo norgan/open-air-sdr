@@ -2,6 +2,7 @@ const leafletUrl = 'https://unpkg.com/leaflet@1.9.4/dist/';
 const tilesUrl = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 const svgNamespace = 'http://www.w3.org/2000/svg';
 export const aircraftOutline = 'M0 -8 L2 -1 L7 3 L7 5 L2 3 L2 7 L4 9 L0 8 L-4 9 L-2 7 L-2 3 L-7 5 L-7 3 L-2 -1 Z';
+let leafletLoader;
 
 function loadResource(element, url, integrity) {
   return new Promise((resolve, reject) => {
@@ -23,8 +24,18 @@ async function loadLeaflet() {
   return window.L;
 }
 
+function getLeaflet() {
+  if (typeof window !== 'undefined' && window.L) return Promise.resolve(window.L);
+  if (!leafletLoader) {
+    leafletLoader = loadLeaflet().catch(error => {
+      leafletLoader = undefined;
+      throw error;
+    });
+  }
+  return leafletLoader;
+}
+
 export function createTowerMap(container, status) {
-  let loader;
   let map;
   let centreKey;
   let lastAircraft;
@@ -37,8 +48,7 @@ export function createTowerMap(container, status) {
     const key = point.join('/');
     rendered = aircraft;
     try {
-      loader ??= loadLeaflet();
-      const leaflet = await loader;
+      const leaflet = await getLeaflet();
       if (container.hidden || rendered !== aircraft) return;
       if (!map) {
         map = leaflet.map(container, {minZoom:3, maxZoom:19, scrollWheelZoom:false});
@@ -76,10 +86,11 @@ export function createTowerMap(container, status) {
           icon.setAttribute('viewBox','-12 -12 24 24');
           icon.setAttribute('aria-hidden','true');
           const shape = document.createElementNS(svgNamespace, 'path');
+          shape.setAttribute('class', 'tower-aircraft-shape');
           shape.setAttribute('d', aircraftOutline);
           icon.append(shape);
           const pin = leaflet.marker(coordinates, {
-            icon:leaflet.divIcon({className:'tower-aircraft-marker',html:icon,iconSize:[24,24]}),
+            icon:leaflet.divIcon({className:'tower-aircraft-marker',html:icon,iconSize:[28,28]}),
             title:item.title, alt:item.title,
           }).bindPopup(label).addTo(map);
           marker = {pin, shape};

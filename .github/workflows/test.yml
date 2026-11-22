@@ -1,0 +1,35 @@
+name: Test
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check browser JavaScript
+        run: |
+          node --input-type=module --check < app.js
+          node --check tower-map.mjs
+          node --check aircraft-appearance.mjs
+      - name: Run receiver tests
+        run: node --test
+      - name: Install browser test tools
+        run: |
+          npm install --no-save --package-lock=false playwright@1.56.1 leaflet@1.9.4
+          npx playwright install --with-deps chromium
+      - name: Check aircraft display in Chromium
+        run: node tests/aircraft-display.browser.mjs
+      - name: Save browser test screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aircraft-display-preview
+          path: test-results/
+          if-no-files-found: ignore

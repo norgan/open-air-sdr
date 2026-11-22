@@ -575,7 +575,7 @@ const assets=new Map([
   ['/','index.html'],['/style.css','style.css'],['/app.js','app.js'],['/sources.mjs','sources.mjs'],
   ['/cb-panel.mjs','cb-panel.mjs'],['/cb-panel.css','cb-panel.css'],['/signal-meter.mjs','signal-meter.mjs'],
   ['/local-setup.mjs','local-setup.mjs'],['/tower-map.mjs','tower-map.mjs'],['/message-help.mjs','message-help.mjs'],
-  ['/detail-fields.mjs','detail-fields.mjs']
+  ['/detail-fields.mjs','detail-fields.mjs'],['/aircraft-appearance.mjs','aircraft-appearance.mjs']
 ]);
 const contentTypes={html:'text/html',css:'text/css',js:'application/javascript',mjs:'application/javascript'};
 

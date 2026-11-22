@@ -5,6 +5,7 @@ import { aircraftDetailFields, messageDetailFields, messageDetailKey } from '/de
 import { explainMessage } from '/message-help.mjs';
 import { estimateSignal } from '/signal-meter.mjs';
 import { aircraftOutline, createTowerMap } from '/tower-map.mjs';
+import { applyAircraftAppearance, defaultAircraftAppearance, loadAircraftAppearance, saveAircraftAppearance } from '/aircraft-appearance.mjs';
 
 const $ = id => document.getElementById(id);
 const icons = {
@@ -339,10 +340,55 @@ const viewTitles = {signals:'Signals',receiver:'Receiver',tower:'Tower','uhf-cb'
 const towerChannel = $('tower-channel');
 const towerSquelch = $('tower-squelch');
 const showTowerMap = createTowerMap($('tower-map'),$('tower-map-status'));
-let towerDisplay = 'map';
+function loadAircraftDisplay(key,fallback) {
+  try {
+    const display=window.localStorage.getItem(key);
+    return ['map','radar'].includes(display)?display:fallback;
+  } catch { return fallback; }
+}
+function saveAircraftDisplay(key,display) {
+  try { window.localStorage.setItem(key,display); } catch {}
+}
+const towerDisplayKey='open-air-tower-aircraft-display';
+const localAircraftDisplayKey='open-air-local-aircraft-display';
+let towerDisplay = loadAircraftDisplay(towerDisplayKey,'map');
+let localAircraftDisplay = loadAircraftDisplay(localAircraftDisplayKey,'radar');
+let aircraftAppearance;
+try { aircraftAppearance=loadAircraftAppearance(window.localStorage); }
+catch { aircraftAppearance={...defaultAircraftAppearance}; }
+applyAircraftAppearance(document.documentElement,aircraftAppearance);
+
+function syncAircraftAppearanceControls() {
+  $('aircraft-colour').value=aircraftAppearance.colour;
+  $('aircraft-outline').value=aircraftAppearance.outline;
+  $('aircraft-size').value=String(aircraftAppearance.size);
+  $('map-opacity').value=String(aircraftAppearance.mapOpacity);
+  $('aircraft-size-value').textContent=aircraftAppearance.size+' px';
+  $('map-opacity-value').textContent=aircraftAppearance.mapOpacity+'%';
+}
+function setAircraftAppearance(patch,persist=true) {
+  aircraftAppearance={...aircraftAppearance,...patch};
+  if(persist) {
+    try { aircraftAppearance=saveAircraftAppearance(window.localStorage,aircraftAppearance); } catch {}
+  }
+  aircraftAppearance=applyAircraftAppearance(document.documentElement,aircraftAppearance);
+  syncAircraftAppearanceControls();
+  if(view==='tower'&&towerDisplay==='radar')drawTowerTraffic(mode==='demo');
+  else if(view==='signals'&&localAircraftDisplay==='radar'&&
+          (sourceById(state.source)?.kind==='aircraft'||currentMode()==='adsb'))drawLocalAircraft(state,mode==='demo');
+}
+for(const [id,key] of [['aircraft-colour','colour'],['aircraft-outline','outline']]) {
+  $(id).addEventListener('input',event=>setAircraftAppearance({[key]:event.currentTarget.value}));
+}
+for(const [id,key] of [['aircraft-size','size'],['map-opacity','mapOpacity']]) {
+  $(id).addEventListener('input',event=>setAircraftAppearance({[key]:Number(event.currentTarget.value)}));
+}
+$('aircraft-style-reset').addEventListener('click',()=>setAircraftAppearance({...defaultAircraftAppearance}));
+syncAircraftAppearanceControls();
 let towerChoicesKey;
 let towerInitTune = false;
 let towerAircraft;
+let localAircraftFallbackCentre;
 let loadingAircraft = false;
 let savedMessages;
 let messageTag;
@@ -498,7 +544,10 @@ renderBrowser();
 function useLocalArea(profile) {
   const centreChanged = JSON.stringify(localArea?.aircraftCentre)!==JSON.stringify(profile.aircraftCentre);
   localArea=profile;
-  if (centreChanged) towerAircraft=undefined;
+  if (centreChanged) {
+    towerAircraft=undefined;
+    localAircraftFallbackCentre=undefined;
+  }
   for (const id of localIds) choices.delete(id);
   localIds.clear();
   for (const preset of profile.presets) {
@@ -516,6 +565,9 @@ function useLocalArea(profile) {
     syncTowerControls();
     tuneTowerOnEntry();
     if (centreChanged) void refreshAircraft();
+  }
+  if (view==='signals' && (sourceById(state.source)?.kind==='aircraft'||currentMode()==='adsb')) {
+    drawLocalAircraft(state,mode==='demo');
   }
   return profile;
 }
@@ -634,7 +686,13 @@ $('tower-scan').addEventListener('click',() => {
 for (const display of ['map','radar']) {
   $('tower-show-'+display).addEventListener('click',() => {
     towerDisplay=display;
+    saveAircraftDisplay(towerDisplayKey,display);
     drawTowerTraffic(mode==='demo');
+  });
+  $('local-show-'+display).addEventListener('click',() => {
+    localAircraftDisplay=display;
+    saveAircraftDisplay(localAircraftDisplayKey,display);
+    drawLocalAircraft(state,mode==='demo');
   });
 }
 
@@ -1364,6 +1422,7 @@ function radar(items, accessibleLabel = 'Relative positions of aircraft received
   };
   const svg = make('svg', {viewBox:'0 0 620 370',role:'img','aria-label':accessibleLabel});
   const cx = 310, cy = 183, radius = 139;
+  const aircraftScale=(Number.isFinite(aircraftAppearance.size)?aircraftAppearance.size:defaultAircraftAppearance.size)/28;
   const farthest = Math.max(0, ...items.map(item => Number.isFinite(item.distanceKm) ? item.distanceKm : 0));
   const limit = farthest > 200 ? Math.ceil(farthest / 100) * 100 : farthest > 100 ? 200 : farthest > 50 ? 100 : 50;
   const labels = {fontFamily:'Cascadia Mono,Consolas,monospace','font-size':'11',fill:'#9ba6b4'};
@@ -1383,12 +1442,16 @@ function radar(items, accessibleLabel = 'Relative positions of aircraft received
     const r = item.distanceKm / limit * radius;
     const x = cx + Math.sin(a) * r;
     const y = cy - Math.cos(a) * r;
-    const group = make('g',{transform:'translate('+x+' '+y+')'});
+    const group = make('g',{class:'radar-aircraft',transform:'translate('+x+' '+y+')'});
     group.append(make('title',{},item.title+' · '+distance(item.distanceKm)));
-    group.append(make('path',{d:aircraftOutline,fill:'#d8efd2',transform:'rotate('+(Number.isFinite(item.heading)?item.heading:0)+')'}));
+    group.append(make('path',{d:aircraftOutline,fill:'var(--aircraft-colour)',stroke:'var(--aircraft-outline)',
+      'stroke-width':'1.5','paint-order':'stroke fill','vector-effect':'non-scaling-stroke',
+      transform:'rotate('+(Number.isFinite(item.heading)?item.heading:0)+') scale('+aircraftScale+')'}));
     if (i < 9) {
       const right=x<420;
-      group.append(make('text',{...labels,fill:'#d8efd2',x:right?11:-11,y:-9,'text-anchor':right?'start':'end'},String(item.title).slice(0,13)));
+      group.append(make('text',{...labels,fill:'var(--aircraft-colour)',stroke:'var(--aircraft-outline)',
+        'stroke-width':'.7','paint-order':'stroke fill',x:right?11:-11,y:-9,
+        'text-anchor':right?'start':'end'},String(item.title).slice(0,13)));
     }
     svg.append(group);
   }
@@ -1418,6 +1481,9 @@ function drawTowerTraffic(demo) {
     status==='rate-limited' ? 'Aircraft feed quota reached.' : status==='unavailable' ? 'Aircraft feed unavailable.' :
     updated ? `${items.length} aircraft · Updated ${updated}` : 'Loading aircraft positions';
   $('activity-caption').textContent=feedback;
+  $('aircraft-display-settings').hidden=false;
+  $('local-aircraft-layout').hidden=true;
+  $('local-aircraft-credit').hidden=true;
   $('tower-aircraft-credit').hidden=demo;
   scope.hidden=true;
   $('radar').hidden=map || !centre;
@@ -1429,6 +1495,35 @@ function drawTowerTraffic(demo) {
   if (centre && map) void showTowerMap(centre,items);
   if (centre && !map) radar(items,'Relative aircraft positions around the Tower map centre');
   rows(items,'aircraft',status==='live' ? 'No recent aircraft positions in this area.' : feedback);
+}
+
+function drawLocalAircraft(next,demo) {
+  const items=demo ? sampleTowerAircraft : next.aircraft ?? [];
+  const firstPosition=items.find(item=>Number.isFinite(item.lat)&&Number.isFinite(item.lon));
+  if(!localArea?.aircraftCentre&&!localAircraftFallbackCentre&&firstPosition) {
+    localAircraftFallbackCentre={latitude:firstPosition.lat,longitude:firstPosition.lon};
+  }
+  const centre=demo ? sampleTowerCentre : localArea?.aircraftCentre ?? localAircraftFallbackCentre;
+  const map=localAircraftDisplay==='map';
+  $('local-show-map').setAttribute('aria-pressed',String(map));
+  $('local-show-radar').setAttribute('aria-pressed',String(!map));
+  $('local-aircraft-layout').hidden=false;
+  $('aircraft-display-settings').hidden=false;
+  $('stage-title').textContent=map?'Local aircraft map':'Aircraft around your receiver';
+  $('stage-caption').textContent=map?'Positions decoded by your antenna':'Distance and direction from the antenna';
+  $('stage-tag').textContent=demo?'SAMPLE':'LOCAL RF';
+  $('tower-aircraft-credit').hidden=true;
+  $('local-aircraft-credit').textContent=demo?'SAMPLE':'LOCAL RF';
+  $('local-aircraft-credit').hidden=false;
+  scope.hidden=true;
+  $('radar').hidden=map;
+  $('tower-map').hidden=!map||!centre;
+  if(!map||!centre)$('tower-map-status').hidden=true;
+  const empty=$('stage-empty');
+  empty.hidden=!map||Boolean(centre);
+  empty.textContent='Set the map centre in Setup or wait for a local aircraft position.';
+  if(map&&centre)void showTowerMap(centre,items);
+  if(!map)radar(items,'Relative positions decoded by your antenna');
 }
 
 function spectrum(data) {
@@ -1558,14 +1653,19 @@ function render(next) {
     tuneTowerOnEntry();
     return;
   }
-  $('tower-map').hidden=true;
-  $('tower-map-status').hidden=true;
-  $('tower-aircraft-credit').hidden=true;
-  const showRadar = kind==='aircraft' && view==='signals';
+  const showLocalAircraft = kind==='aircraft' && view==='signals';
   const graph = view === 'receiver' && liveFrame ? spectrumFromFrame(liveFrame) : next.spectrum;
-  $('stage-title').textContent=showRadar?'Aircraft around your receiver':'Radio spectrum';
-  $('stage-caption').textContent=showRadar?'Distance and direction from the antenna':view==='receiver' ? 'Click the spectrum or waterfall to tune' : (source?.description || 'Signal power across the tuned band');
-  $('stage-tag').textContent=demo?'SAMPLE':active?'LOCAL RF':'OFFLINE';
+  if(!showLocalAircraft) {
+    $('tower-map').hidden=true;
+    $('tower-map-status').hidden=true;
+    $('tower-aircraft-credit').hidden=true;
+    $('local-aircraft-credit').hidden=true;
+    $('local-aircraft-layout').hidden=true;
+    $('aircraft-display-settings').hidden=true;
+    $('stage-title').textContent='Radio spectrum';
+    $('stage-caption').textContent=view==='receiver' ? 'Click the spectrum or waterfall to tune' : (source?.description || 'Signal power across the tuned band');
+    $('stage-tag').textContent=demo?'SAMPLE':active?'LOCAL RF':'OFFLINE';
+  }
   $('activity-title').textContent=kind==='aircraft'?'Aircraft received':kind==='message'?'Decoded messages':'Reception activity';
   $('activity-caption').textContent=kind==='aircraft'?'Positions broadcast by aircraft':kind==='message'?'Newest messages first':kind==='spectrum'?'Spectrum only':streamOptions.audio?'Audio from your receiver':'Audio plays through SDRangel';
   if (kind==='aircraft' && next.adsb) {
@@ -1581,12 +1681,16 @@ function render(next) {
     ].filter(Boolean);
     if (diagnostics.length) $('activity-caption').textContent=diagnostics.join(' · ');
   }
-  scope.hidden=showRadar;
-  $('radar').hidden=!showRadar;
-  const empty = $('stage-empty');
-  empty.hidden=showRadar||Boolean(graph?.power?.length);
-  empty.textContent=active?'Waiting for a spectrum reading.': 'Waiting for the SDRangel receiver.';
-  if(showRadar) radar(positionedAircraft); else spectrum(graph);
+  if(showLocalAircraft) {
+    drawLocalAircraft(next,demo);
+  } else {
+    scope.hidden=false;
+    $('radar').hidden=true;
+    const empty = $('stage-empty');
+    empty.hidden=Boolean(graph?.power?.length);
+    empty.textContent=active?'Waiting for a spectrum reading.': 'Waiting for the SDRangel receiver.';
+    spectrum(graph);
+  }
   if (view==='receiver' && active && !demo && !busy && !streamOnline && graph?.power?.length &&
       Number.isFinite(graph.startFrequency) && Number.isFinite(graph.stopFrequency) && next.updated !== lastSnapshotRow) {
     lastSnapshotRow = next.updated;
