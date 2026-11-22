@@ -126,6 +126,7 @@ test('two maps share one Leaflet load and mounted markers retain the live size c
   const originalDocument = globalThis.document;
   const originalWindow = globalThis.window;
   const originalResizeObserver = globalThis.ResizeObserver;
+  const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
   t.after(() => {
     if (originalDocument === undefined) delete globalThis.document;
     else globalThis.document = originalDocument;
@@ -133,6 +134,8 @@ test('two maps share one Leaflet load and mounted markers retain the live size c
     else globalThis.window = originalWindow;
     if (originalResizeObserver === undefined) delete globalThis.ResizeObserver;
     else globalThis.ResizeObserver = originalResizeObserver;
+    if (originalRequestAnimationFrame === undefined) delete globalThis.requestAnimationFrame;
+    else globalThis.requestAnimationFrame = originalRequestAnimationFrame;
   });
 
   const resources = [];
@@ -155,8 +158,8 @@ test('two maps share one Leaflet load and mounted markers retain the live size c
       setAttribute(name, value) {
         this.attributes.set(name, String(value));
       },
-      append(child) {
-        this.children.push(child);
+      append(...children) {
+        this.children.push(...children);
       },
     };
   }
@@ -166,6 +169,7 @@ test('two maps share one Leaflet load and mounted markers retain the live size c
       return {
         invalidateSize() {},
         setView() {},
+        on() {},
       };
     },
     tileLayer() {
@@ -213,6 +217,7 @@ test('two maps share one Leaflet load and mounted markers retain the live size c
   globalThis.ResizeObserver = class {
     observe() {}
   };
+  globalThis.requestAnimationFrame = () => 1;
 
   const centre = {latitude:-33.86, longitude:151.21};
   const aircraft = [{
