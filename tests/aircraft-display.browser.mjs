@@ -93,8 +93,34 @@ try{
   browser=await chromium.launch();
   page=await browser.newPage({viewport:{width:1280,height:1000}});
   page.setDefaultTimeout(15000);
+  await page.addInitScript(()=>{
+    const probe=window.__openAirWheelProbe={maps:[],events:[],hooked:false};
+    const describe=node=>node instanceof Element?
+      node.tagName.toLowerCase()+(node.id?'#'+node.id:'')+(typeof node.className==='string'?'.'+node.className.replace(/\s+/g,'.'):''):
+      node===window?'window':node===document?'document':String(node?.nodeName||'');
+    const wheel=(event,phase)=>{
+      probe.events.push({type:'wheel',phase,isTrusted:event.isTrusted,deltaY:event.deltaY,deltaMode:event.deltaMode,
+        defaultPrevented:event.defaultPrevented,target:describe(event.target),
+        path:event.composedPath().slice(0,10).map(describe),scrollY,time:performance.now()});
+      if(probe.events.length>100)probe.events.shift();
+    };
+    document.addEventListener('wheel',event=>wheel(event,'document-capture'),{capture:true,passive:true});
+    document.addEventListener('load',event=>{
+      if(!(event.target instanceof HTMLScriptElement)||probe.hooked||!window.L?.Map?.addInitHook)return;
+      probe.hooked=true;
+      window.L.Map.addInitHook(function(){
+        const container=this.getContainer();
+        if(container.id!=='tower-map')return;
+        probe.maps.push(this);
+        container.addEventListener('wheel',event=>wheel(event,'map-capture'),{capture:true,passive:true});
+        container.addEventListener('wheel',event=>wheel(event,'map-bubble'),{passive:true});
+        this.on('zoomstart zoomend',event=>probe.events.push({type:event.type,zoom:this.getZoom(),time:performance.now()}));
+      });
+    },true);
+  });
   const context=page.context();
   const errors=[];
+  const independentFailures=[];
   page.on('pageerror',error=>errors.push(error.message));
   const childApiRequests=[];
   context.on('request',request=>{
@@ -183,6 +209,21 @@ try{
     const value=await page.waitForFunction(renderedTileZoom,{selector:'#tower-map'});
     return value.jsonValue();
   };
+  const wheelDiagnostics=()=>page.evaluate(()=>({
+    version:window.L?.version,scrollY,
+    getEventListenersAvailable:typeof getEventListeners==='function',
+    containerId:document.getElementById('tower-map')?._leaflet_id,
+    classes:document.getElementById('tower-map')?.className,
+    events:window.__openAirWheelProbe?.events,
+    maps:window.__openAirWheelProbe?.maps.map(map=>({zoom:map.getZoom(),centre:map.getCenter(),
+      option:map.options.scrollWheelZoom,enabled:map.scrollWheelZoom?.enabled(),
+      wheelDelta:map.scrollWheelZoom?._delta,lastWheelPoint:map.scrollWheelZoom?._lastMousePos,
+      animation:map._animatingZoom,animationTarget:map._animateToZoom,
+    })),
+    levels:[...document.querySelectorAll('#tower-map .leaflet-tile-container')].map(element=>({
+      style:element.getAttribute('style'),sources:[...element.querySelectorAll('img')].map(image=>image.currentSrc||image.src),
+    })),
+  }));
   const enterAircraftFullscreen=async()=>{
     await page.locator('#aircraft-fullscreen').click();
     await page.waitForFunction(()=>Boolean(document.fullscreenElement)||
@@ -302,18 +343,14 @@ try{
   assert.equal(await page.evaluate(point=>Boolean(document.elementFromPoint(point.x,point.y)?.closest('#tower-map')),pointer),true,
     'the wheel coordinates are inside the visible geographic map');
   await page.mouse.move(pointer.x,pointer.y);
-  console.log('Wheel zoom starts at',initialZoom,'with pointer',JSON.stringify(pointer));
+  console.log('Wheel zoom starts at',initialZoom,'with pointer',JSON.stringify(pointer),JSON.stringify(await wheelDiagnostics()));
   await page.mouse.wheel(0,-360);
   try{
     await page.waitForFunction(renderedTileZoom,{selector:'#tower-map',minimum:initialZoom});
   }catch(error){
-    console.log('Wheel zoom DOM state',JSON.stringify(await page.evaluate(()=>({
-      classes:document.getElementById('tower-map').className,
-      levels:[...document.querySelectorAll('#tower-map .leaflet-tile-container')].map(element=>({
-        style:element.getAttribute('style'),sources:[...element.querySelectorAll('img')].map(image=>image.currentSrc||image.src),
-      })),
-    }))));
-    throw error;
+    console.log('Wheel zoom DOM state',JSON.stringify(await wheelDiagnostics()));
+    await page.screenshot({path:'test-results/aircraft-wheel-failure.png',fullPage:true});
+    independentFailures.push(error);
   }
   const zoomBeforeFullscreen=await tileZoom();
   await enterAircraftFullscreen();
@@ -550,6 +587,7 @@ try{
     'detached panels share parent data instead of polling RF or network positions');
   assert.equal(tunes,0,'Map/Radar and appearance controls never retune');
   assert.deepEqual(errors,[],'browser modules initialise without page errors');
+  if(independentFailures.length)throw new AggregateError(independentFailures,'Independent aircraft display checks failed.');
   console.log('Aircraft display browser checks passed.');
 }catch(error){
   await mkdir('test-results',{recursive:true});
