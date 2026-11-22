@@ -338,8 +338,8 @@ try{
   await mapTarget.scrollIntoViewIfNeeded();
   const popup=page.locator('#tower-map .leaflet-popup');
   if(await popup.count()){
-    await page.locator('#tower-map .leaflet-popup-close-button').click();
-    await popup.waitFor({state:'detached'});
+    await page.locator('#tower-map .leaflet-popup-close-button').last().click();
+    await page.waitForFunction(()=>document.querySelectorAll('#tower-map .leaflet-popup').length===0);
   }
   await mapTarget.scrollIntoViewIfNeeded();
   const initialZoom=await tileZoom();
