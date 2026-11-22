@@ -1483,7 +1483,7 @@ function radar(items, accessibleLabel = 'Relative positions of aircraft received
     if (label) node.textContent = label;
     return node;
   };
-  const svg = make('svg', {viewBox:'0 0 620 370',role:'group','aria-label':accessibleLabel});
+  const svg = make('svg', {xmlns:NS,viewBox:'0 0 620 370',role:'group','aria-label':accessibleLabel});
   const cx = 310, cy = 183, radius = 139;
   const aircraftScale=(Number.isFinite(aircraftAppearance.size)?aircraftAppearance.size:defaultAircraftAppearance.size)/28;
   const farthest = Math.max(0, ...items.map(item => Number.isFinite(item.distanceKm) ? item.distanceKm : 0));

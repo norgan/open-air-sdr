@@ -180,6 +180,7 @@ try{
   assert.equal(identityRequests.length,0,'aircraft identity is looked up only when a row opens');
 
   // Identity enrichment augments a received track without supplying its RF position.
+  for(let step=0;step<3;step++)await page.getByRole('button',{name:'Zoom in',exact:true}).click();
   await page.locator('#tower-map .tower-aircraft-marker[data-aircraft-hex="abc123"]').click();
   await recordFor('LOCAL123').locator('.aircraft-profile-airline').filter({hasText:'Preview Air'}).waitFor();
   assert.equal(await recordFor('LOCAL123').getAttribute('open'),'','selecting a map icon opens its aircraft row');
@@ -282,8 +283,10 @@ try{
   assert.equal(await aircraftWindow.locator('script[src="/app.js"]').count(),0);
   assert.deepEqual(childApiRequests,[],'an idle detached aircraft window starts no API poller');
   await aircraftWindow.setViewportSize({width:720,height:500});
+  for(let step=0;step<3;step++)await aircraftWindow.getByRole('button',{name:'Zoom in',exact:true}).click();
   await aircraftWindow.locator('#detached-view-radar').click();
   await aircraftWindow.locator('#detached-radar').waitFor({state:'visible'});
+  await aircraftWindow.waitForFunction(()=>document.querySelectorAll('#detached-radar .radar-aircraft').length===2);
   assert.equal(await aircraftWindow.locator('#detached-map').isVisible(),false);
   await aircraftWindow.locator('#detached-view-map').click();
   await aircraftWindow.locator('#detached-map').waitFor({state:'visible'});
