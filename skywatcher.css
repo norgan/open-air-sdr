@@ -5,6 +5,8 @@ body[data-view="skywatcher"] .stage:has(>#waterfall-panel[hidden]){display:none}
 .sky-controls{display:flex;flex-wrap:wrap;align-items:end;gap:10px;padding:14px}
 .sky-controls select{min-width:130px}
 .sky-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.sky-actions button:disabled{cursor:not-allowed}
+.sky-actions button[data-pending="true"]{cursor:progress}
 .sky-status{width:100%;margin:0;color:var(--muted);font-size:12px}
 #sky-decoder{color:var(--text)}
 .sky-grid{display:grid;grid-template-columns:minmax(235px,.85fr) minmax(0,1.15fr);gap:14px}

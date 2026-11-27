@@ -11,7 +11,8 @@ function skyPoint(point) {
 export function mountSkywatcher({request, onTune}) {
   const $ = id => document.getElementById('sky-'+id);
   const satellite = $('satellite'), frequency = $('frequency'), rate = $('symbol-rate');
-  let active = false, live = true, orbitLoading = false, statusLoading = false, action = false;
+  let active = false, live = true, orbitLoading = false, statusLoading = false, action = '';
+  let statusUnavailable = false;
   let orbit, report, selectedPass, orbitTimer, statusTimer, selectedKey, notice = '', orbitFailed = false;
   let lastGalleryId, passRowsKey = '';
 
@@ -96,13 +97,19 @@ export function mountSkywatcher({request, onTune}) {
     const recording = capture?.phase==='recording';
     const usingRadio = ['starting','recording','stopping'].includes(capture?.phase);
     const working = usingRadio || capture?.phase==='decoding';
-    for(const field of [satellite,frequency,rate]) field.disabled = action || usingRadio;
+    for(const field of [satellite,frequency,rate]) field.disabled = Boolean(action || usingRadio);
     $('tune').disabled = !live || action || usingRadio || !target();
-    $('capture').disabled = !live || action || working || !target() || !report?.decoderReady;
+    $('capture').disabled = !live || action || working || !target() || statusUnavailable || !report?.decoderReady;
     $('stop').hidden = !recording;
-    $('stop').disabled = action;
-    $('decoder').hidden = report?.decoderReady !== false;
-    $('decoder').textContent = 'Image decoding needs SatDump installed on the receiver host.';
+    $('stop').disabled = Boolean(action);
+    for(const name of ['tune','capture','stop']) $(name).dataset.pending = String(action === name);
+    const decoderMissing = report?.decoderReady === false;
+    $('capture').textContent = action === 'capture' ? 'Starting capture…'
+      : decoderMissing ? 'SatDump required' : statusUnavailable ? 'Receiver unavailable'
+      : !report ? 'Checking decoder…' : 'Capture pass';
+    $('decoder').hidden = !decoderMissing && !statusUnavailable;
+    $('decoder').textContent = decoderMissing ? 'Install SatDump on the receiver host to enable capture and image decoding.'
+      : 'Could not check the receiver. Skywatcher will retry.';
     const phases = {
       starting:'Preparing the IQ recorder…',
       recording:capture ? `Recording ${capture.satellite} at ${mhz(capture.frequency)} · ends ${capture.ends ? formatTime.format(capture.ends) : 'when stopped'}` : '',
@@ -157,18 +164,19 @@ export function mountSkywatcher({request, onTune}) {
     if(!active || statusLoading || action)return;
     statusLoading = true;
     try {
-      report = await request('/api/skywatcher/status');
+      report = await request('/api/skywatcher/status',{signal:AbortSignal.timeout(15_000)});
+      statusUnavailable = false;
       if(report.capture?.phase==='complete' && lastGalleryId!==report.capture.id){
         lastGalleryId = report.capture.id;
         void refreshGallery();
       }
-    } catch { report = undefined; }
+    } catch { report = undefined; statusUnavailable = true; }
     finally { statusLoading = false; }
     drawControls();
   }
   async function control(name) {
     if(action)return;
-    action = true;
+    action = name;
     notice = '';
     drawControls();
     try {
@@ -176,14 +184,18 @@ export function mountSkywatcher({request, onTune}) {
       const body = name==='stop' ? {} : {satellite:Number(satellite.value),frequency:Number(frequency.value),
         symbolRate:Number(rate.value),ends};
       const result=await request('/api/skywatcher/'+name,{method:'POST',
-        headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+        headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:AbortSignal.timeout(75_000)});
       if(result.capture)report = {...report,capture:result.capture};
       if(result.state){
         onTune(result.state);
         notice = 'Tuned to '+mhz(result.state.frequency)+'.';
       }
-    } catch(error) { notice = error.message; }
-    finally { action = false; drawControls(); void refreshStatus(); }
+    } catch(error) {
+      if (error.name === 'TimeoutError') {
+        statusUnavailable = true;
+        notice = 'The receiver did not respond in time. Checking its status.';
+      } else notice = error.message;
+    } finally { action = ''; drawControls(); void refreshStatus(); }
   }
 
   satellite.addEventListener('change',()=>{

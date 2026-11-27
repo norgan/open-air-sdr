@@ -605,6 +605,7 @@ try{
   const meteorPass={rise:satelliteNow-30000,peak:satelliteNow+100000,set:satelliteNow+300000,
     maxElevation:64,path:[{az:20,el:0},{az:100,el:64},{az:200,el:0}]};
   let skyPhase, skyTune, skyStart;
+  let decoderReady=false;
   const imageURL='/api/skywatcher/image/00000000-0000-4000-8000-000000000001/0';
   const skyImage=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a8t0AAAAASUVORK5CYII=','base64');
   await context.route(origin+'/api/skywatcher/orbits',route=>route.fulfill({json:{
@@ -614,7 +615,7 @@ try{
   }}));
   const captureState=()=>skyPhase?{id:'fixture',satellite:'Meteor-M N2-3',phase:skyPhase,
     frequency:137900000,ends:meteorPass.set}:null;
-  await context.route(origin+'/api/skywatcher/status',route=>route.fulfill({json:{decoderReady:true,capture:captureState()}}));
+  await context.route(origin+'/api/skywatcher/status',route=>route.fulfill({json:{decoderReady,capture:captureState()}}));
   await context.route(origin+'/api/skywatcher/tune',route=>{
     skyTune=route.request().postDataJSON();
     return route.fulfill({json:{state:{source:'custom-spectrum-137900000',sourceName:'Meteor-M N2-3 LRPT',mode:'spectrum',
@@ -634,6 +635,12 @@ try{
   await context.route(origin+imageURL,route=>route.fulfill({body:skyImage,contentType:'image/png'}));
   await page.locator('#nav-skywatcher').click();
   await waitVisible('#skywatcher');
+  const missingDecoder=page.getByRole('button',{name:'SatDump required'});
+  await missingDecoder.waitFor();
+  assert.equal(await missingDecoder.isDisabled(),true);
+  assert.equal(await missingDecoder.evaluate(button=>getComputedStyle(button).cursor),'not-allowed');
+  decoderReady=true;
+  await page.getByRole('button',{name:'Capture pass',exact:true}).waitFor();
   await page.locator('#sky-passes button').first().click();
   assert.match(await page.locator('#sky-pointing').innerText(),/Elevation 20°/);
   assert.equal(await page.locator('#sky-path').getAttribute('points')!== '',true);
