@@ -65,7 +65,7 @@ test('Debian deployment includes the complete browser module graph',async()=>{
   assert.deepEqual([...visited].sort(),[
     'aircraft-appearance.mjs','aircraft-callsign.mjs','aircraft-card.mjs','aircraft-screen.mjs','aircraft-selection.mjs','app.js','cb-panel.mjs',
     'detached-panel.mjs','detached-panels.mjs','detail-fields.mjs','local-setup.mjs','message-help.mjs',
-    'signal-meter.mjs','sources.mjs','tower-map.mjs',
+    'signal-meter.mjs','skywatcher.mjs','sources.mjs','tower-map.mjs',
   ]);
 });
 

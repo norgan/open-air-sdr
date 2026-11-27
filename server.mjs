@@ -1,4 +1,5 @@
 import { createServer } from 'node:http';
+import { createReadStream } from 'node:fs';
 import { readFile, unlink } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { join, resolve } from 'node:path';
@@ -15,6 +16,8 @@ import { createMessageArchive, messageLimit } from './message-archive.mjs';
 import { createRfScanner, validateRfScanRange } from './rf-scan.mjs';
 import { availableSources, customSource, isAirbandScanChannel, isSydneyPreset, localSource, receiverModes } from './sources.mjs';
 import { audioRelay, configureAudioForwarding, waterfallRelay } from './streams.mjs';
+import { createWeatherPlanner, lrptFrequencies } from './skywatcher-orbits.mjs';
+import { createWeatherCapture, validateWeatherTarget } from './skywatcher-capture.mjs';
 
 const host = '127.0.0.1';
 const directory = fileURLToPath(new URL('.', import.meta.url));
@@ -263,7 +266,7 @@ export class Receiver {
     this.pending=null;
   }
   call(name,args={},timeout) {
-    const global = ['get_instance_summary','get_map_items','get_location','list_channel_types'].includes(name);
+    const global = ['get_instance_summary','get_map_items','get_location','list_channel_types','get_server_status'].includes(name);
     return this.mcp.call(name, global?args:{deviceSetIndex:this.device,...args}, timeout);
   }
   async inspect(){
@@ -582,6 +585,7 @@ const assets=new Map([
   ['/detail-fields.mjs','detail-fields.mjs'],['/aircraft-appearance.mjs','aircraft-appearance.mjs'],
   ['/aircraft-card.mjs','aircraft-card.mjs'],['/aircraft-card.css','aircraft-card.css'],
   ['/aircraft-callsign.mjs','aircraft-callsign.mjs'],
+  ['/skywatcher.mjs','skywatcher.mjs'],['/skywatcher.css','skywatcher.css'],
   ['/aircraft-screen.mjs','aircraft-screen.mjs'],['/aircraft-screen.css','aircraft-screen.css'],
   ['/aircraft-selection.mjs','aircraft-selection.mjs'],['/detached-panel.html','detached-panel.html'],
   ['/detached-panel.mjs','detached-panel.mjs'],['/detached-panels.mjs','detached-panels.mjs'],['/detached-panel.css','detached-panel.css']
@@ -735,6 +739,21 @@ export function appServer(receiver, port=8877, options={}){
   async function stopScanners(){
     await Promise.all([cbScanner.stop(),towerScanner.stop(),rfScanner.stop()]);
   }
+  async function tuneWeather(target) {
+    seedTune(fresh);
+    await stopScanners();
+    const custom={frequency:target.frequency,mode:'spectrum',name:target.satellite.name+' LRPT'};
+    const state=await tune(undefined,custom,{quick:true});
+    const selected=tuneSlot(state,receiver.selectedSource??customSource(custom));
+    if(selected){
+      if(!sameChannel(currentTune,selected))previousTune=currentTune;
+      currentTune=selected;
+    }
+    return state;
+  }
+  const planWeather=createWeatherPlanner({request:options.orbitRequest});
+  const sky=options.skyCapture??createWeatherCapture({receiver,prepare:tuneWeather,
+    directory:options.skyDirectory,binary:options.satdump,cli:options.satdumpCli});
   const receiverActions=new Set(['/api/tune','/api/ab-switch','/api/cb-scan','/api/tower-scan','/api/rf-scan','/api/cb-squelch','/api/audio-settings','/api/profile','/api/local-scan']);
   const haCommands=new Set(['tune','ab-switch','cb-scan','cb-squelch','tower-scan','local-scan']);
   const server=createServer(async(req,res)=>{
@@ -802,6 +821,49 @@ export function appServer(receiver, port=8877, options={}){
         return stream(res);
       }
       if(req.method==='GET'&&path==='/api/profile')return send(res,200,{...(await getProfile()),revision:areaRevision});
+      if(req.method==='GET'&&path==='/api/skywatcher/orbits'){
+        const profile=await getProfile();
+        return send(res,200,{...await planWeather(profile.aircraftCentre),observer:profile.name,frequencies:lrptFrequencies});
+      }
+      if(req.method==='GET'&&path==='/api/skywatcher/status'){
+        return send(res,200,{decoderReady:await sky.ready(),capture:sky.status()});
+      }
+      if(req.method==='GET'&&path==='/api/skywatcher/gallery')return send(res,200,await sky.gallery());
+      const skyImage=/^\/api\/skywatcher\/image\/([0-9a-f-]{36})\/(\d{1,2})$/.exec(path);
+      if(req.method==='GET'&&skyImage){
+        const picture=await sky.image(skyImage[1],Number(skyImage[2]));
+        if(!picture)return send(res,404,{error:'Image not found.'});
+        res.writeHead(200,{'Content-Type':picture.type,'Cache-Control':'private, max-age=3600','X-Content-Type-Options':'nosniff'});
+        const stream=createReadStream(picture.path);
+        stream.on('error',()=>res.destroy());
+        res.on('close',()=>stream.destroy());
+        return stream.pipe(res);
+      }
+      if(req.method==='POST'&&['/api/skywatcher/tune','/api/skywatcher/capture','/api/skywatcher/stop'].includes(path)){
+        if(!allowedOrigins.has(req.headers.origin)||!String(req.headers['content-type']).startsWith('application/json')){
+          return send(res,403,{error:'Use the Skywatcher controls in Open Air.'});
+        }
+        if(path.endsWith('/stop')){
+          void sky.stop();
+          return send(res,202,{capture:sky.status()});
+        }
+        if(controlling||sky.holdsTuner())return send(res,409,{error:'The receiver is busy with a capture or other control.'});
+        const chunks=[];
+        let size=0;
+        for await(const chunk of req){
+          size+=chunk.length;
+          if(size>1024)return send(res,413,{error:'Request is too large.'});
+          chunks.push(chunk);
+        }
+        const action=JSON.parse(Buffer.concat(chunks).toString('utf8'));
+        const target=validateWeatherTarget(action);
+        if(controlling||sky.holdsTuner())return send(res,409,{error:'The receiver is busy with a capture or other control.'});
+        controlling=true;
+        try{
+          if(path.endsWith('/tune'))return send(res,200,{state:withControls(await tuneWeather(target))});
+          return send(res,202,{capture:await sky.start(target,action.ends)});
+        } finally { controlling=false; }
+      }
       if(req.method==='GET'&&path==='/api/state'){
         await getProfile();
         const state=await snapshot();
@@ -848,6 +910,7 @@ export function appServer(receiver, port=8877, options={}){
       }
       if(req.method==='POST'&&path==='/api/close'){
         if(publicOrigin || !allowedOrigins.has(req.headers.origin))return send(res,403,{error:'The Open Air service is managed on the receiver.'});
+        if(sky.holdsTuner())return send(res,409,{error:'Stop the Skywatcher capture before closing Open Air.'});
         if(receiver.pending)return send(res,409,{error:'Wait for the source switch to finish.'});
         await stopScanners();
         if(pendingRead)await pendingRead;
@@ -871,6 +934,7 @@ export function appServer(receiver, port=8877, options={}){
         }
         const action=JSON.parse(Buffer.concat(chunks).toString('utf8'));
         if(controlling)return send(res,409,{error:'Another receiver control is in progress.'});
+        if(sky.holdsTuner()&&path!=='/api/profile')return send(res,409,{error:'Stop the Skywatcher capture before retuning the receiver.'});
         controlling=true;
         try{
           if(path==='/api/profile'){
@@ -974,6 +1038,8 @@ export function appServer(receiver, port=8877, options={}){
     }catch(error){return send(res,400,{error:errorText(error)});}
   });
   server.once('close',()=>void stopScanners());
+  server.recoverSkywatcher=()=>sky.recover();
+  server.stopSkywatcher=()=>sky.stop({discard:true});
   return server;
 }
 
@@ -987,6 +1053,9 @@ if(process.argv[1]&&pathToFileURL(resolve(process.argv[1])).href===import.meta.u
     origin:process.env.OPEN_AIR_ORIGIN,
     access:{username:process.env.OPEN_AIR_WEB_USER,password:process.env.OPEN_AIR_WEB_PASSWORD,haToken:process.env.OPEN_AIR_HA_TOKEN},
     aircraftApiKey:process.env.OPEN_AIR_ADSB_LOL_API_KEY,
+    skyDirectory:process.env.OPEN_AIR_SKY_DIRECTORY||join(dataDirectory,'skywatcher'),
+    satdump:process.env.OPEN_AIR_SATDUMP,
+    satdumpCli:process.env.OPEN_AIR_SATDUMP_CLI,
     profileStore:createLocalProfileStore(process.env.OPEN_AIR_PROFILE_FILE||join(dataDirectory,'local-profile.json')),
     spectrumPort:portOf(process.env.OPEN_AIR_SPECTRUM_PORT,null),
     desktopSpectrum:process.platform==='win32'&&typeof globalThis.WebSocket==='function',
@@ -996,6 +1065,7 @@ if(process.argv[1]&&pathToFileURL(resolve(process.argv[1])).href===import.meta.u
   server.listen(port,host,()=>{
     const url='http://'+host+':'+port;
     console.log('Open Air ready at '+url);
+    void server.recoverSkywatcher().catch(error=>console.warn('Skywatcher recorder recovery:',errorText(error)));
     if(process.argv.includes('--open')&&process.platform==='win32'){
       const opener=spawn('explorer.exe',[url],{stdio:'ignore',windowsHide:true,detached:true});
       opener.on('error',()=>{});
@@ -1004,7 +1074,7 @@ if(process.argv[1]&&pathToFileURL(resolve(process.argv[1])).href===import.meta.u
   });
   for(const signal of ['SIGTERM','SIGINT'])process.once(signal,()=>{
     server.close();
-    receiver.releaseCapture().catch(()=>{}).finally(()=>process.exit());
+    Promise.allSettled([receiver.releaseCapture(),server.stopSkywatcher()]).finally(()=>process.exit());
   });
 }
 

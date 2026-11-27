@@ -18,6 +18,16 @@ Expanded aircraft cards and map popups show the airline, a database-supplied fli
 
 One tuner cannot stay on airband voice and 1090 MHz simultaneously. Tower uses network positions for that reason. Receiving both ATC and ADS-B locally at the same time requires a second receiver.
 
+### Skywatcher
+
+Set the **Tower map centre** in **Setup** to your antenna location, then open **Skywatcher**. Choose an upcoming Meteor-M N2-3 or N2-4 pass to see its peak elevation, sky direction and local times. Pick a high pass and use a 137 MHz antenna with a clear view of the sky. The Skywatcher view shows live pointing and estimated Doppler when the chosen satellite is above the horizon. [CelesTrak orbital data](https://celestrak.org/) · [Meteor transmitter listings](https://db.satnogs.org/satellite/57166/)
+
+Choose the downlink and LRPT symbol rate. **Tune** shows the band in the waterfall where available. **Capture pass** tunes the shared receiver and records complex IQ through SDRangel’s File Sink. Starting within a minute of the selected pass automatically stops just after the predicted end. You can stop manually. All recordings are limited to 16 minutes. The gallery opens full-size images after SatDump processes the IQ.
+
+Install [SatDump 1.2.2](https://github.com/SatDump/SatDump/releases/tag/1.2.2) on the receiver host to enable capture and decode. Open Air finds `satdump` on the service’s PATH. Set `OPEN_AIR_SATDUMP` to an absolute path if needed. For a SatDump build that uses `satdump pipeline`, set `OPEN_AIR_SATDUMP_CLI=pipeline`. Leave at least 5 GiB free for recording and processing. The 137.100, 137.900 and 137.9125 MHz presets are selectable because downlinks and symbol rates can change. Check recent SatNOGS observations when uncertain.
+
+Skywatcher stores decoded captures under `~/open-air-data/skywatcher` by default. Override that with `OPEN_AIR_SKY_DIRECTORY` on an existing writable data volume. Orbit prediction uses the bundled [satellite.js 6.0.1](https://github.com/shashwatak/satellite-js/tree/6.0.1) SGP4 library. NOAA POES APT satellites have been [decommissioned](https://www.nesdis.noaa.gov/news/legacy-orbit-noaa-decommissions-the-poes-satellite-constellation).
+
 **Messages** keeps the latest 500 decoded ACARS and VDL Mode 2 messages on your receiver server. Open a message to inspect its metadata, complete decoded payload, raw frame and **Meaning** notes for recognised labels, positions, airport codes and system identifiers. [ACARS application formats](https://github.com/szpajder/libacars/blob/master/doc/PROG_GUIDE.md) · [Message labels](https://github.com/brmlab/acarsdec/blob/master/datasets/acars_mls.txt)
 
 In **Receiver**, drag the lower edge of the waterfall or focus the handle and use the arrow keys to resize it. The browser remembers the height.

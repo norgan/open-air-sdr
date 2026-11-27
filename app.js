@@ -4,6 +4,7 @@ import { createLocalSetup } from '/local-setup.mjs';
 import { messageDetailFields, messageDetailKey } from '/detail-fields.mjs';
 import { aircraftRecordKey, createAircraftCard, updateAircraftCard } from '/aircraft-card.mjs';
 import { aircraftLabel, radioCallsign } from '/aircraft-callsign.mjs';
+import { mountSkywatcher } from '/skywatcher.mjs';
 import { explainMessage } from '/message-help.mjs';
 import { estimateSignal } from '/signal-meter.mjs';
 import { aircraftOutline, createTowerMap } from '/tower-map.mjs';
@@ -24,6 +25,7 @@ const icons = {
 function icon(kind) { return '<svg viewBox="0 0 24 24" aria-hidden="true">' + (icons[kind] || icons.voice) + '</svg>'; }
 let mode = 'live';
 let view = 'signals';
+let skywatcher;
 let state = {};
 let busy = false;
 let closed = false;
@@ -350,7 +352,7 @@ const modes = new Map(receiverModes.map(definition => [definition.id, definition
 const modeLabels = new Map(receiverModes.map(({id,label}) => [id,label]));
 const presetModes = {AMDemod:'am',NFMDemod:'nfm',BFMDemod:'bfm',ADSBDemod:'adsb'};
 const audioModes = new Set(['am','nfm','bfm']);
-const viewTitles = {signals:'Signals',receiver:'Receiver',tower:'Tower','uhf-cb':'UHF CB',messages:'Messages',setup:'Setup'};
+const viewTitles = {signals:'Signals',receiver:'Receiver',tower:'Tower',skywatcher:'Skywatcher','uhf-cb':'UHF CB',messages:'Messages',setup:'Setup'};
 const towerChannel = $('tower-channel');
 const towerSquelch = $('tower-squelch');
 const showTowerMap = createTowerMap($('tower-map'),$('tower-map-status'),{
@@ -1797,7 +1799,7 @@ function render(next) {
   $('side-status').textContent = demo?'Sample data':active?'Receiver connected':next.connected?'Receiver stopped':'Receiver unavailable';
   $('title').textContent = view === 'signals'
     ? (source?.name || next.sourceName || 'Signals')
-    : {receiver:'Receiver',tower:'Tower','uhf-cb':'Australian UHF CB',messages:'Messages',setup:'Local setup'}[view];
+    : {receiver:'Receiver',tower:'Tower',skywatcher:'Skywatcher','uhf-cb':'Australian UHF CB',messages:'Messages',setup:'Local setup'}[view];
   $('section-name').textContent = viewTitles[view];
   $('subtitle').textContent = view === 'signals'
     ? 'Known signals'
@@ -1837,6 +1839,15 @@ function render(next) {
   $('metrics').replaceChildren(...metrics.map(([v,l])=>measure(v,l)));
   $('updated').textContent=demo?'SAMPLE VIEW':next.updated?'UPDATED '+formattedTime(next.updated):'-';
   if(!busy) notice(next.notice);
+  skywatcher?.show(view==='skywatcher',!demo && !closed);
+  if(view==='skywatcher'){
+    $('aircraft-display-settings').hidden=true;
+    $('local-aircraft-layout').hidden=true;
+    scope.hidden=true;
+    $('radar').hidden=true;
+    $('tower-map').hidden=true;
+    return;
+  }
   if (view==='tower') {
     drawTowerTraffic(demo);
     tuneTowerOnEntry();
@@ -2001,6 +2012,7 @@ detachedPanels=initialiseDetachedPanels({
   });}
 });
 subscribeAircraftSelection(event=>{paintAircraftSelection(event);syncDetachedAircraft();});
+skywatcher=mountSkywatcher({request,onTune:render});
 showView(readRoute());
 void loadCapabilities();
 setInterval(refresh,2300);

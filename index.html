@@ -12,6 +12,7 @@
   <link rel="stylesheet" href="/cb-panel.css">
   <link rel="stylesheet" href="/aircraft-screen.css">
   <link rel="stylesheet" href="/aircraft-card.css">
+  <link rel="stylesheet" href="/skywatcher.css">
   <script type="module" src="/app.js"></script>
   <script type="module" src="/aircraft-screen.mjs"></script>
 </head>
@@ -23,6 +24,7 @@
       <a class="view-link" href="#signals" id="nav-signals" aria-current="page">Signals</a>
       <a class="view-link" href="#receiver" id="nav-receiver">Receiver</a>
       <a class="view-link" href="#tower" id="nav-tower">Tower</a>
+      <a class="view-link" href="#skywatcher" id="nav-skywatcher">Skywatcher</a>
       <a class="view-link" href="#uhf-cb" id="nav-uhf-cb">UHF CB</a>
       <a class="view-link" href="#messages" id="nav-messages">Messages</a>
       <a class="view-link" href="#setup" id="nav-setup">Setup</a>
@@ -251,6 +253,45 @@
       <div class="panel-top"><div><h2>ACARS and VDL Mode 2</h2><p id="history-status" role="status">Loading saved messages.</p></div></div>
       <label class="preset-search" for="history-search"><span>Search</span><input id="history-search" type="search" placeholder="Aircraft, label or message text" autocomplete="off"></label>
       <div id="history-results" class="activity-list" aria-label="Saved messages"></div>
+    </section>
+    <section id="skywatcher" aria-label="Satellite passes and weather imagery" hidden>
+      <section class="panel sky-controls" aria-label="Satellite receiver">
+        <label class="tuner-field" for="sky-satellite">Satellite<select id="sky-satellite"></select></label>
+        <label class="tuner-field" for="sky-frequency">Downlink<select id="sky-frequency"></select></label>
+        <label class="tuner-field" for="sky-symbol-rate">LRPT symbol rate
+          <select id="sky-symbol-rate"><option value="72000">72 ksym/s</option><option value="80000">80 ksym/s</option></select>
+        </label>
+        <div class="sky-actions">
+          <button type="button" id="sky-tune" class="control">Tune</button>
+          <button type="button" id="sky-capture" class="control primary-control">Capture pass</button>
+          <button type="button" id="sky-stop" class="control" hidden>Stop and decode</button>
+        </div>
+        <p id="sky-status" class="sky-status" role="status"></p>
+        <p id="sky-decoder" class="sky-status" hidden></p>
+      </section>
+      <div class="sky-grid">
+        <section class="panel sky-track" aria-labelledby="sky-track-heading">
+          <div class="panel-top"><div><h2 id="sky-track-heading">Sky track</h2><p id="sky-observer">Loading observer location</p></div></div>
+          <div class="sky-track-body">
+            <svg viewBox="0 0 280 280" role="img" aria-label="Sky plot. The edge is the horizon. The centre is overhead.">
+              <g class="sky-rings" fill="none"><circle cx="140" cy="140" r="110"/><circle cx="140" cy="140" r="73.3"/><circle cx="140" cy="140" r="36.7"/><path d="M30 140H250M140 30V250"/></g>
+              <g class="sky-directions" text-anchor="middle"><text x="140" y="21">N</text><text x="265" y="145">E</text><text x="140" y="269">S</text><text x="15" y="145">W</text></g>
+              <polyline id="sky-path" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+              <circle id="sky-position" r="5" cx="-10" cy="-10"/>
+            </svg>
+            <p id="sky-pointing"></p>
+            <a id="sky-transmitters" target="_blank" rel="noopener noreferrer" hidden>Downlink listings and recent observations</a>
+          </div>
+        </section>
+        <section class="panel" aria-labelledby="sky-passes-heading">
+          <div class="panel-top"><div><h2 id="sky-passes-heading">Upcoming passes</h2><p id="sky-orbit-status" role="status">Loading orbital data</p></div><a class="tag" href="https://celestrak.org/" target="_blank" rel="noopener">CelesTrak</a></div>
+          <div id="sky-passes" class="sky-passes"></div>
+        </section>
+      </div>
+      <section class="panel" aria-labelledby="sky-images-heading">
+        <div class="panel-top"><div><h2 id="sky-images-heading">Decoded weather images</h2><p id="sky-gallery-status" role="status"></p></div></div>
+        <div id="sky-images" class="sky-images"></div>
+      </section>
     </section>
     <section class="metrics" id="metrics" aria-label="Reception measurements"></section>
     <p id="detached-panel-notice" class="notice" role="status" hidden></p>

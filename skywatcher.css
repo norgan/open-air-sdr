@@ -1,0 +1,27 @@
+body[data-view="skywatcher"] :is(.metrics,.activity,#stage-content,.stage > .panel-top,#live-audio-settings){display:none}
+body[data-view="skywatcher"] .pane-grid{grid-template-columns:minmax(0,1fr)}
+body[data-view="skywatcher"] .stage:has(>#waterfall-panel[hidden]){display:none}
+#skywatcher{display:grid;gap:14px;margin:14px 0}
+.sky-controls{display:flex;flex-wrap:wrap;align-items:end;gap:10px;padding:14px}
+.sky-controls select{min-width:130px}
+.sky-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.sky-status{width:100%;margin:0;color:var(--muted);font-size:12px}
+#sky-decoder{color:var(--text)}
+.sky-grid{display:grid;grid-template-columns:minmax(235px,.85fr) minmax(0,1.15fr);gap:14px}
+.sky-track-body{padding:0 14px 14px;text-align:center;font-size:12px;color:var(--muted)}
+.sky-track-body svg{width:min(100%,300px);display:block;margin:auto}
+.sky-rings{stroke:var(--line);stroke-width:1}
+.sky-directions{fill:var(--muted);font:13px var(--mono)}
+#sky-path{stroke:var(--accent2)}
+#sky-position{fill:#ffd166;stroke:#101820;stroke-width:2}
+.sky-track-body a{color:var(--accent2)}
+.sky-passes{max-height:340px;overflow:auto}
+.sky-pass{width:100%;display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:4px 10px;text-align:left;padding:10px 14px;border:0;border-top:1px solid var(--line);background:transparent;color:var(--text);cursor:pointer}
+.sky-pass:hover,.sky-pass[aria-pressed="true"]{background:#24342b}
+.sky-pass span:last-child{grid-column:1/-1;color:var(--muted);font-size:12px}
+.sky-pass .sky-elevation{color:var(--accent2);font:12px var(--mono)}
+.sky-images{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,230px),1fr));gap:12px;padding:0 14px 14px}
+.sky-image{min-width:0;color:var(--text);text-decoration:none}
+.sky-image img{display:block;width:100%;aspect-ratio:4/3;object-fit:contain;background:var(--bg);border:1px solid var(--line);border-radius:6px}
+.sky-image span{display:block;margin-top:5px;color:var(--muted);font-size:12px;overflow-wrap:anywhere}
+@media(max-width:680px){.sky-grid{grid-template-columns:minmax(0,1fr)}.sky-passes{max-height:290px}}
