@@ -15,6 +15,9 @@ export function mountSkywatcher({request, onTune}) {
   let statusUnavailable = false;
   let orbit, report, selectedPass, orbitTimer, statusTimer, selectedKey, notice = '', orbitFailed = false;
   let lastGalleryId, passRowsKey = '';
+  let schedule, scheduleTimer, scheduleLoading=false, scheduleAction=false, scheduleNotice='';
+  let scheduleRevision=0;
+  let settingsKey='', jobRowsKey='';
 
   function satellites() { return orbit?.satellites ?? []; }
   function target() { return satellites().find(item => item.id === Number(satellite.value)); }
@@ -90,9 +93,129 @@ export function mountSkywatcher({request, onTune}) {
       ? `${orbit.observer || 'Saved site'} · horizon at the edge, overhead at the centre`
       : 'Observer location uses your Tower map centre.';
     drawPlot(selectedPass);
+    drawScheduleControls();
+  }
+
+  function drawScheduleControls(){
+    const queued=schedule?.jobs?.some(job=>['queued','starting','recording'].includes(job.phase)&&
+      job.satellite===Number(satellite.value)&&Math.abs(job.rise-selectedPass?.rise)<180_000);
+    $('queue-pass').hidden=schedule?.available===false;
+    $('queue-pass').disabled=!live||!schedule?.available||!selectedPass||
+      selectedPass.peak<=Date.now()||queued||scheduleAction||Boolean(action);
+    $('queue-pass').textContent=queued?'Pass scheduled':'Schedule pass';
+    for(const button of $('schedule').querySelectorAll('button'))button.disabled=!live||scheduleAction;
+  }
+
+  function namedSatellite(id){
+    return schedule?.satellites?.find(item=>item.id===id)?.name ?? satellites().find(item=>item.id===id)?.name ?? 'Meteor';
+  }
+
+  function buildAutoSettings(settings){
+    $('auto-enabled').checked=settings.enabled;
+    $('auto-elevation').value=settings.minElevation;
+    const groups=settings.targets.map(target=>{
+      const field=document.createElement('fieldset');
+      field.className='sky-auto-target';
+      field.dataset.satellite=target.satellite;
+      const legend=document.createElement('legend');
+      legend.textContent=namedSatellite(target.satellite);
+      const enabled=document.createElement('label');
+      const toggle=document.createElement('input');
+      toggle.type='checkbox';
+      toggle.name='enabled';
+      toggle.checked=target.enabled;
+      enabled.append(toggle,' Include');
+      const downlink=document.createElement('label');
+      downlink.className='tuner-field';
+      const channels=document.createElement('select');
+      channels.name='frequency';
+      populate(channels,schedule.frequencies.map(value=>[value,mhz(value)]),target.frequency);
+      downlink.append('Downlink',channels);
+      const symbols=document.createElement('label');
+      symbols.className='tuner-field';
+      const rates=document.createElement('select');
+      rates.name='symbolRate';
+      populate(rates,[[72000,'72 ksym/s'],[80000,'80 ksym/s']],target.symbolRate);
+      symbols.append('LRPT symbol rate',rates);
+      field.append(legend,enabled,downlink,symbols);
+      return field;
+    });
+    $('auto-targets').replaceChildren(...groups);
+  }
+
+  function drawSchedule(){
+    $('schedule').hidden=!schedule?.available;
+    if(!schedule?.available){drawScheduleControls();return;}
+    const {settings,jobs,upcoming,note}=schedule;
+    const key=JSON.stringify(settings);
+    if(settingsKey!==key){settingsKey=key;buildAutoSettings(settings);}
+    const next=upcoming[0];
+    const status=settings.enabled
+      ? next ? `Auto-capture on · Next ${namedSatellite(next.satellite)} · ${formatTime.format(next.rise)} · ${next.maxElevation}°`
+        : 'Auto-capture on · Waiting for a qualifying pass'
+      : 'Auto-capture off · Schedule individual passes from the list above';
+    $('schedule-status').textContent=[scheduleNotice,status,note].filter(Boolean).join(' · ');
+    const queued=jobs.filter(job=>['queued','starting','recording'].includes(job.phase)).sort((a,b)=>a.rise-b.rise);
+    const history=jobs.filter(job=>!queued.includes(job)).slice(0,6);
+    const rows=[...queued,...history];
+    const rowsKey=JSON.stringify(rows);
+    if(rowsKey!==jobRowsKey){
+      jobRowsKey=rowsKey;
+      $('jobs').replaceChildren(...rows.map(job=>{
+        const row=document.createElement('li');
+        const info=document.createElement('div');
+        const title=document.createElement('strong');
+        title.textContent=namedSatellite(job.satellite)+' · '+formatTime.format(job.rise);
+        const detail=document.createElement('span');
+        const phase=job.phase==='recording'?'Capture in progress':job.phase[0].toUpperCase()+job.phase.slice(1);
+        detail.textContent=[phase,job.automatic?'Automatic':null,mhz(job.frequency),job.message].filter(Boolean).join(' · ');
+        info.append(title,detail);
+        row.append(info);
+        if(job.phase==='queued'){
+          const cancel=document.createElement('button');
+          cancel.type='button';
+          cancel.className='control';
+          cancel.textContent='Cancel';
+          cancel.setAttribute('aria-label','Cancel '+title.textContent);
+          cancel.addEventListener('click',()=>void updateSchedule({action:'cancel',id:job.id}));
+          row.append(cancel);
+        }
+        return row;
+      }));
+    }
+    drawScheduleControls();
+  }
+
+  async function refreshSchedule(){
+    if(!active||scheduleLoading||scheduleAction)return;
+    scheduleLoading=true;
+    const revision=scheduleRevision;
+    try{
+      const updated=await request('/api/skywatcher/schedule',{signal:AbortSignal.timeout(15_000)});
+      if(revision===scheduleRevision)schedule=updated;
+    }catch{
+      if(!schedule)schedule={available:false};
+    }finally{scheduleLoading=false;}
+    drawSchedule();
+  }
+
+  async function updateSchedule(body){
+    if(scheduleAction||!live)return;
+    scheduleRevision++;
+    scheduleAction=true;
+    scheduleNotice='Saving schedule…';
+    drawSchedule();
+    try{
+      schedule=await request('/api/skywatcher/schedule',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(body),signal:AbortSignal.timeout(20_000)});
+      scheduleNotice=body.action==='queue'?'Pass scheduled. You can close this page.':
+        body.action==='cancel'?'Scheduled pass cancelled.':'Automatic capture settings saved.';
+    }catch(error){scheduleNotice=error.message;}
+    finally{scheduleAction=false;drawSchedule();}
   }
 
   function drawControls() {
+    drawScheduleControls();
     const capture = report?.capture;
     const recording = capture?.phase==='recording';
     const usingRadio = ['starting','recording','stopping'].includes(capture?.phase);
@@ -207,6 +330,21 @@ export function mountSkywatcher({request, onTune}) {
   });
   frequency.addEventListener('change',()=>{notice='';drawControls();});
   for(const name of ['tune','capture','stop'])$(name).addEventListener('click',()=>void control(name));
+  $('queue-pass').addEventListener('click',()=>{
+    if(!selectedPass)return;
+    void updateSchedule({action:'queue',rise:selectedPass.rise,satellite:Number(satellite.value),
+      frequency:Number(frequency.value),symbolRate:Number(rate.value)});
+  });
+  $('auto-form').addEventListener('submit',event=>{
+    event.preventDefault();
+    const targets=[...$('auto-targets').children].map(field=>({
+      satellite:Number(field.dataset.satellite),enabled:field.querySelector('[name=enabled]').checked,
+      frequency:Number(field.querySelector('[name=frequency]').value),
+      symbolRate:Number(field.querySelector('[name=symbolRate]').value),
+    }));
+    void updateSchedule({action:'settings',settings:{enabled:$('auto-enabled').checked,
+      minElevation:Number($('auto-elevation').value),targets}});
+  });
   return {
     show(visible, receiverLive) {
       live = receiverLive;
@@ -215,13 +353,16 @@ export function mountSkywatcher({request, onTune}) {
       document.getElementById('skywatcher').hidden = !active;
       clearInterval(orbitTimer);
       clearInterval(statusTimer);
+      clearInterval(scheduleTimer);
       if(!active)return;
       drawControls();
       void refreshOrbits();
       void refreshStatus();
       void refreshGallery();
+      void refreshSchedule();
       orbitTimer = setInterval(refreshOrbits,10000);
       statusTimer = setInterval(refreshStatus,2000);
+      scheduleTimer = setInterval(refreshSchedule,5000);
     },
   };
 }

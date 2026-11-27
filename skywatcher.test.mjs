@@ -49,7 +49,7 @@ test('SDRangel capture converts 24-bit samples, selects the SatDump pipeline and
   const root = join(folder,'gallery');
   const frequency = 137100000;
   const target = validateWeatherTarget({satellite:59051,frequency,symbolRate:80000});
-  let base, path, decoding = false;
+  let base, path, decoding = false, restored = false, completed;
   const calls = [];
   const receiver = {device:0,inspect(){},
     async channelSettings(){return {fileRecordName:base+'.sdriq'};},
@@ -78,19 +78,28 @@ test('SDRangel capture converts 24-bit samples, selects the SatDump pipeline and
       decoding=true;
       assert.equal(command,'/fixture/satdump');
       assert.equal(capture.holdsTuner(),false,'the radio is free while SatDump processes the IQ');
+      assert.equal(restored,true,'the receiver is restored before decoding');
       assert.equal(args[0],'meteor_m2-x_lrpt_80k');
       assert.equal(args[1],'baseband');
       assert.deepEqual(args.slice(4,10),['--samplerate','300000','--baseband_format','cs16','--satellite_number','M2-4']);
       assert.deepEqual(await readFile(args[2]),Buffer.from('ff7f0080','hex'));
       await writeFile(join(args[3],'weather.png'),Buffer.alloc(1024));
     }});
-  const started=await capture.start(target,time+180000);
+  const started=await capture.start(target,time+180000,{
+    afterRecording(){
+      assert.equal(capture.holdsTuner(),true,'the tuner stays reserved while restoring the channel');
+      restored=true;
+    },
+    onFinish(result){completed=result;},
+  });
   assert.equal(started.phase,'recording');
   assert.equal(started.ends,time+180000);
   assert.equal(capture.holdsTuner(),true);
   assert.equal(calls[0][1].frequencyOffset,-100000);
   assert.equal(calls[0][1].log2Decim,3);
   assert.equal((await capture.stop()).phase,'complete');
+  assert.equal(completed.phase,'complete');
+  assert.equal(completed.id,started.id);
   assert.equal(decoding,true);
   assert.equal(calls.at(-1)[1].deleteChannel,true);
   const gallery=await capture.gallery();

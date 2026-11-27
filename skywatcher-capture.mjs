@@ -114,6 +114,7 @@ export function createWeatherCapture({receiver, directory, prepare, binary, cli 
   const call = (method, args, timeout) => receiver.call(method, args, timeout);
   const enabled = Boolean(root && typeof receiver.call === 'function' && typeof receiver.inspect === 'function');
   const holdsTuner = () => ['starting','recording','stopping'].includes(current?.phase);
+  const isBusy = () => holdsTuner() || Boolean(finishing);
   const makeStatus = () => current && {id:current.id, satellite:current.target.satellite.name,
     frequency:current.target.frequency, symbolRate:current.target.symbolRate, phase:current.phase,
     started:current.started, ends:current.ends, message:current.message};
@@ -170,10 +171,16 @@ export function createWeatherCapture({receiver, directory, prepare, binary, cli 
     return available;
   }
 
-  async function start(target, endTime) {
+  async function release(job) {
+    if(!job.tuned||!job.afterRecording)return;
+    try { await job.afterRecording(); }
+    catch(error) { console.warn('Skywatcher could not restore the previous channel:',error.message); }
+  }
+
+  async function start(target, endTime, {afterRecording,onFinish} = {}) {
     if (!enabled) throw Error('Skywatcher capture is unavailable on this receiver.');
-    if (holdsTuner() || finishing) throw Error('Wait for the current Skywatcher capture to finish.');
-    const job = {id:randomUUID(),target,phase:'starting',started:now(),ends:null};
+    if (isBusy()) throw Error('Wait for the current Skywatcher capture to finish.');
+    const job = {id:randomUUID(),target,phase:'starting',started:now(),ends:null,afterRecording,onFinish};
     current = job;
     try {
       job.executable = await decoderPath();
@@ -182,6 +189,7 @@ export function createWeatherCapture({receiver, directory, prepare, binary, cli 
       const s = await statfs(root);
       if (s.bavail * s.bsize < 5 * 1024 ** 3) throw Error('Skywatcher needs at least 5 GiB of free space for IQ and decoding.');
       const tuned = await prepare(target);
+      job.tuned = true;
       const offset = target.frequency - tuned.centre;
       if (!Number.isInteger(offset) || tuned.frequency !== target.frequency) throw Error('The receiver did not confirm the satellite frequency.');
       job.requested = true;
@@ -204,6 +212,7 @@ export function createWeatherCapture({receiver, directory, prepare, binary, cli 
           const files = await stopRecording(job);
           await removeOwnedFiles(files, job.base);
         }
+        await release(job);
         job.phase = 'failed';
       } catch {
         job.phase = 'recording';
@@ -266,6 +275,7 @@ export function createWeatherCapture({receiver, directory, prepare, binary, cli 
         return makeStatus();
       }
       try {
+        await release(job);
         job.phase = 'decoding';
         if (!discard) await processRecording(job, files);
         job.phase = discard ? 'cancelled' : 'complete';
@@ -274,6 +284,8 @@ export function createWeatherCapture({receiver, directory, prepare, binary, cli 
         job.phase = 'failed';
         job.message = error.message;
       } finally { await removeOwnedFiles(files,job.base); }
+      try { await job.onFinish?.(makeStatus()); }
+      catch(error) { console.warn('Skywatcher could not save the scheduled capture result:',error.message); }
       return makeStatus();
     })().finally(() => { finishing=null; });
     return finishing;
@@ -304,6 +316,6 @@ export function createWeatherCapture({receiver, directory, prepare, binary, cli 
     if (!type || !(await lstat(path).catch(() => null))?.isFile()) return null;
     return {path,type};
   }
-  return {start,stop,recover,status:makeStatus,holdsTuner,gallery,image,
+  return {start,stop,recover,status:makeStatus,holdsTuner,isBusy,gallery,image,
     ready:async()=>enabled && Boolean(await decoderPath())};
 }

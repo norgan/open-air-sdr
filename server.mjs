@@ -18,6 +18,7 @@ import { availableSources, customSource, isAirbandScanChannel, isSydneyPreset, l
 import { audioRelay, configureAudioForwarding, waterfallRelay } from './streams.mjs';
 import { createWeatherPlanner, lrptFrequencies } from './skywatcher-orbits.mjs';
 import { createWeatherCapture, validateWeatherTarget } from './skywatcher-capture.mjs';
+import { createWeatherSchedule } from './skywatcher-schedule.mjs';
 
 const host = '127.0.0.1';
 const directory = fileURLToPath(new URL('.', import.meta.url));
@@ -754,6 +755,33 @@ export function appServer(receiver, port=8877, options={}){
   const planWeather=createWeatherPlanner({request:options.orbitRequest});
   const sky=options.skyCapture??createWeatherCapture({receiver,prepare:tuneWeather,
     directory:options.skyDirectory,binary:options.satdump,cli:options.satdumpCli});
+  function scheduledReceiverBusy(){
+    if(controlling||receiver.pending||sky.holdsTuner()||sky.isBusy?.())return 'Waiting for the receiver or current capture.';
+    const {cbScan,towerScan,rfScan}=scannerStatus();
+    return [cbScan,towerScan,rfScan].some(scan=>['scanning','holding'].includes(scan.status))
+      ? 'Waiting for the active radio scan to finish.' : '';
+  }
+  async function launchScheduledCapture(target,ends,onFinish){
+    if(scheduledReceiverBusy())return null;
+    controlling=true;
+    try{
+      const before=await snapshot();
+      const original=tuneSlot(before,receiver.selectedSource);
+      const originalAlternate=previousTune;
+      if(ends-Date.now()<45_000)throw Error('The pass ended before the receiver was ready.');
+      return await sky.start(target,ends,{onFinish,afterRecording:async()=>{
+        if(!original)return;
+        const restored=await tune(original.id,undefined,{recall:original,quick:true});
+        currentTune=tuneSlot(restored,receiver.selectedSource??original)??original;
+        previousTune=originalAlternate;
+      }});
+    }finally{controlling=false;}
+  }
+  const schedule=options.skyDirectory&&createWeatherSchedule({
+    file:join(options.skyDirectory,'schedule.json'),
+    site:async()=>(await getProfile()).aircraftCentre,
+    plan:planWeather,busy:scheduledReceiverBusy,ready:()=>sky.ready(),launch:launchScheduledCapture,
+  });
   const receiverActions=new Set(['/api/tune','/api/ab-switch','/api/cb-scan','/api/tower-scan','/api/rf-scan','/api/cb-squelch','/api/audio-settings','/api/profile','/api/local-scan']);
   const haCommands=new Set(['tune','ab-switch','cb-scan','cb-squelch','tower-scan','local-scan']);
   const server=createServer(async(req,res)=>{
@@ -827,6 +855,23 @@ export function appServer(receiver, port=8877, options={}){
       }
       if(req.method==='GET'&&path==='/api/skywatcher/status'){
         return send(res,200,{decoderReady:await sky.ready(),capture:sky.status()});
+      }
+      if(path==='/api/skywatcher/schedule'){
+        if(req.method==='GET')return send(res,200,schedule?await schedule.status():{available:false});
+        if(req.method==='POST'){
+          if(!allowedOrigins.has(req.headers.origin)||!String(req.headers['content-type']).startsWith('application/json')){
+            return send(res,403,{error:'Use the Skywatcher controls in Open Air.'});
+          }
+          if(!schedule)return send(res,503,{error:'Scheduling is unavailable on this receiver.'});
+          const chunks=[];
+          let size=0;
+          for await(const chunk of req){
+            size+=chunk.length;
+            if(size>4096)return send(res,413,{error:'Schedule request is too large.'});
+            chunks.push(chunk);
+          }
+          return send(res,200,await schedule.request(JSON.parse(Buffer.concat(chunks).toString('utf8'))));
+        }
       }
       if(req.method==='GET'&&path==='/api/skywatcher/gallery')return send(res,200,await sky.gallery());
       const skyImage=/^\/api\/skywatcher\/image\/([0-9a-f-]{36})\/(\d{1,2})$/.exec(path);
@@ -912,6 +957,8 @@ export function appServer(receiver, port=8877, options={}){
         if(publicOrigin || !allowedOrigins.has(req.headers.origin))return send(res,403,{error:'The Open Air service is managed on the receiver.'});
         if(sky.holdsTuner())return send(res,409,{error:'Stop the Skywatcher capture before closing Open Air.'});
         if(receiver.pending)return send(res,409,{error:'Wait for the source switch to finish.'});
+        if(controlling)return send(res,409,{error:'Wait for the receiver control to finish.'});
+        schedule?.stop();
         await stopScanners();
         if(pendingRead)await pendingRead;
         await receiver.releaseCapture();
@@ -1037,9 +1084,9 @@ export function appServer(receiver, port=8877, options={}){
       return send(res,404,{error:'Page not found.'});
     }catch(error){return send(res,400,{error:errorText(error)});}
   });
-  server.once('close',()=>void stopScanners());
-  server.recoverSkywatcher=()=>sky.recover();
-  server.stopSkywatcher=()=>sky.stop({discard:true});
+  server.once('close',()=>{schedule?.stop();void stopScanners();});
+  server.recoverSkywatcher=async()=>{await sky.recover();schedule?.start();};
+  server.stopSkywatcher=()=>{schedule?.stop();return sky.stop({discard:true});};
   return server;
 }
 

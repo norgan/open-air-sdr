@@ -264,6 +264,7 @@
         <div class="sky-actions">
           <button type="button" id="sky-tune" class="control">Tune</button>
           <button type="button" id="sky-capture" class="control primary-control">Capture pass</button>
+          <button type="button" id="sky-queue-pass" class="control" disabled>Schedule pass</button>
           <button type="button" id="sky-stop" class="control" hidden>Stop and decode</button>
         </div>
         <p id="sky-status" class="sky-status" role="status"></p>
@@ -288,6 +289,26 @@
           <div id="sky-passes" class="sky-passes"></div>
         </section>
       </div>
+      <section id="sky-schedule" class="panel" aria-labelledby="sky-schedule-heading" hidden>
+        <div class="panel-top"><div><h2 id="sky-schedule-heading">Scheduled captures</h2><p id="sky-schedule-status" role="status"></p></div></div>
+        <div class="sky-schedule-body">
+          <ul id="sky-jobs" class="sky-jobs"></ul>
+          <details class="sky-auto-settings">
+            <summary>Automatic captures</summary>
+            <form id="sky-auto-form">
+              <div class="sky-auto-options">
+                <label><input type="checkbox" id="sky-auto-enabled"> Auto-capture qualifying passes</label>
+                <label class="tuner-field" for="sky-auto-elevation">Minimum peak elevation
+                  <input id="sky-auto-elevation" type="number" min="10" max="90" step="1" required>
+                </label>
+              </div>
+              <div id="sky-auto-targets" class="sky-auto-targets"></div>
+              <button class="control" type="submit">Save automatic captures</button>
+              <p>The server can retune the shared radio while this page is closed. Active scans keep the tuner.</p>
+            </form>
+          </details>
+        </div>
+      </section>
       <section class="panel" aria-labelledby="sky-images-heading">
         <div class="panel-top"><div><h2 id="sky-images-heading">Decoded weather images</h2><p id="sky-gallery-status" role="status"></p></div></div>
         <div id="sky-images" class="sky-images"></div>

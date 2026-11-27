@@ -606,6 +606,28 @@ try{
     maxElevation:64,path:[{az:20,el:0},{az:100,el:64},{az:200,el:0}]};
   let skyPhase, skyTune, skyStart;
   let decoderReady=false;
+  const satelliteProfile={id:57166,name:'Meteor-M N2-3',defaultFrequency:137900000};
+  const scheduleState={
+    available:true,satellites:[satelliteProfile],frequencies:[137100000,137900000,137912500],
+    settings:{enabled:false,minElevation:30,targets:[{satellite:57166,frequency:137900000,symbolRate:72000,enabled:true}]},
+    jobs:[],upcoming:[],
+  };
+  await context.route(origin+'/api/skywatcher/schedule',route=>{
+    if(route.request().method()==='POST'){
+      const body=route.request().postDataJSON();
+      if(body.action==='queue'){
+        assert.deepEqual(body,{action:'queue',rise:meteorPass.rise,satellite:57166,frequency:137900000,symbolRate:80000});
+        scheduleState.jobs=[{...body,id:'scheduled-fixture',phase:'queued',maxElevation:meteorPass.maxElevation}];
+      }else if(body.action==='cancel'){
+        assert.equal(body.id,'scheduled-fixture');
+        scheduleState.jobs[0].phase='cancelled';
+      }else{
+        assert.deepEqual(body,{action:'settings',settings:{...scheduleState.settings,enabled:true,minElevation:45}});
+        scheduleState.settings=body.settings;
+      }
+    }
+    return route.fulfill({json:scheduleState});
+  });
   const imageURL='/api/skywatcher/image/00000000-0000-4000-8000-000000000001/0';
   const skyImage=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a8t0AAAAASUVORK5CYII=','base64');
   await context.route(origin+'/api/skywatcher/orbits',route=>route.fulfill({json:{
@@ -647,6 +669,16 @@ try{
   await page.locator('#sky-tune').click();
   assert.deepEqual(skyTune,{satellite:57166,frequency:137900000,symbolRate:72000,ends:meteorPass.set+15000});
   await page.locator('#sky-symbol-rate').selectOption('80000');
+  await page.getByRole('button',{name:'Schedule pass',exact:true}).click();
+  await page.getByRole('button',{name:'Pass scheduled',exact:true}).waitFor();
+  await page.locator('#sky-schedule').getByRole('button',{name:/^Cancel Meteor-M N2-3/}).click();
+  await page.getByText(/Scheduled pass cancelled\./).waitFor();
+  await page.getByText('Automatic captures',{exact:true}).click();
+  await page.locator('#sky-auto-enabled').check();
+  await page.locator('#sky-auto-elevation').fill('45');
+  await page.getByRole('button',{name:'Save automatic captures'}).click();
+  await page.getByText(/Automatic capture settings saved\./).waitFor();
+  assert.match(await page.locator('#sky-schedule-status').innerText(),/Auto-capture on/);
   await page.locator('#sky-capture').click();
   await waitVisible('#sky-stop');
   assert.equal(skyStart.symbolRate,80000);
